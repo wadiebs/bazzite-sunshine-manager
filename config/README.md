@@ -1,10 +1,4 @@
-# Config folder
-
-Environment-first configuration. You can override these by setting env vars
-or by creating a local `.env` (if you wire in dotenv) or editing and exporting before running.
-
 ## Common toggles
-
 - IMPORT_STEAM=1
 - IMPORT_HEROIC=1
 - INCLUDE_SYSTEM_APPS=1

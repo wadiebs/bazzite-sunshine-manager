@@ -12,3 +12,4 @@
 - INCLUDE_SOURCES="epic,gog"
 - SYSTEM_APPS_JSON="/usr/share/sunshine/apps.json"
 - FORCE_COLOR=0
+

@@ -19,7 +19,7 @@ ujust setup-sunshine
 ```
 Choice enable is not enabled yet
 
-Go to a folder where you want to download this tool such as Scripts directory under gome
+Go to a folder where you want to download this tool such as Scripts directory under home
 ```bash
 mkdir -p "$HOME/Scripts" && cd "$HOME/Scripts"
 ```

@@ -76,8 +76,9 @@ def import_steam(home: str, conf_dir: str, images_dir: str, settings: Dict[str, 
             m_name=re.search(r'"name"\s*"([^"]+)"',txt)
             if not (m_id and m_name): continue
             appid=int(m_id.group(1)); name=m_name.group(1); app_count+=1
-            if blacklisted(appid,name):
-                log(f"Skipping blacklisted [{appid}] {yn(name)}"); continue
+            if blacklisted(appid, name):
+                log(f"Skipping blacklisted [{appid}] {name}")
+                continue
 
             if steam_mode=="flatpak":
                 cmd=f'flatpak-spawn --host flatpak run com.valvesoftware.Steam steam -applaunch {appid}'

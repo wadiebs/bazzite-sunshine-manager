@@ -1,28 +1,23 @@
 #!/usr/bin/env python3
 """
-Bazzite Sunshine Manager 
+Bazzite Sunshine Manager — fresh write with env first
 
 - Auto-installs requirements if missing (no virtualenv needed)
-- Imports Steam/Heroic entries and merges them into Sunshine's apps.json
+- Recreates Sunshine's apps.json on every run
+- JSON order: "env" first, then "apps" (then optional "meta")
 """
 
 import sys
 import os
 import shutil
 import pathlib
-import json
 from pathlib import Path
 from typing import Dict, Any
-
 
 # -----------------------------
 # Bootstrap: ensure requirements
 # -----------------------------
 def ensure_requirements():
-    """
-    Install Python requirements if they are not already available.
-    Uses --user to avoid needing admin rights.
-    """
     try:
         import PIL  # noqa: F401
         return
@@ -39,39 +34,40 @@ def ensure_requirements():
     print(f"Installing requirements: {' '.join(cmd)}", file=sys.stderr)
     try:
         subprocess.check_call(cmd)
-        # Re-verify import after install (handles new PATH requirements for site.USER_BASE)
-        import importlib
-        import site
-        # Ensure user site-packages is on sys.path in this process
-        user_sp = site.getusersitepackages()
-        if user_sp not in sys.path:
-            sys.path.append(user_sp)
+        import site, importlib
+        usp = site.getusersitepackages()
+        if usp not in sys.path:
+            sys.path.append(usp)
         importlib.invalidate_caches()
         import PIL  # noqa: F401
     except Exception as e:
         print(f"[ERROR] Failed to install requirements: {e}", file=sys.stderr)
-        print("Tip: try running the install manually (with admin rights if needed):", file=sys.stderr)
-        print(f"  {sys.executable} -m pip install -r {req}", file=sys.stderr)
+        print(f"Tip: {sys.executable} -m pip install -r {req}", file=sys.stderr)
         sys.exit(1)
-
 
 ensure_requirements()
 
-# Now safe to import local modules that may depend on installed packages
-from common.utils import log, ensure_obj_with_apps, read_json, write_json  # noqa: E402
+# Safe to import local modules now
+from common.utils import log, write_json  # noqa: E402
 from importers.steam import import_steam  # noqa: E402
 from importers.heroic import import_heroic  # noqa: E402
-
+from importers.launchers import import_launchers
 
 def detect_sunshine_config_dir(home: str) -> str:
-    """Detect Sunshine config directory (handles Flatpak + native)."""
+    """Detect Sunshine config directory (Flatpak + native)."""
     flatpak_ids = ["dev.lizardbyte.app.Sunshine", "dev.lizardbyte.Sunshine"]
     for fid in flatpak_ids:
         fp_dir = os.path.join(home, ".var", "app", fid, "config", "sunshine")
         if os.path.isdir(fp_dir):
             return fp_dir
-    # Fallback to native
     return os.path.join(home, ".config", "sunshine")
+
+
+def getenv_flag(name: str, default: bool) -> bool:
+    val = os.getenv(name)
+    if val is None:
+        return default
+    return str(val).strip().lower() in ("1", "true", "yes", "on")
 
 
 def main(argv: list[str]) -> int:
@@ -81,44 +77,67 @@ def main(argv: list[str]) -> int:
 
     # Paths
     apps_json = os.path.join(conf_dir, "apps.json")
-    apps_json_bak = f"{apps_json}.bak"
-
-    # Put images alongside Sunshine config (portable/safe)
     images_root = os.path.join(conf_dir, "images")
     images_dir_steam = os.path.join(images_root, "steam")
     images_dir_heroic = os.path.join(images_root, "heroic")
     images_dir_sideload = os.path.join(images_root, "sideload")
-    os.makedirs(images_dir_steam, exist_ok=True)
-    os.makedirs(images_dir_heroic, exist_ok=True)
-    os.makedirs(images_dir_sideload, exist_ok=True)
+    for d in (images_dir_steam, images_dir_heroic, images_dir_sideload):
+        os.makedirs(d, exist_ok=True)
+
     log(f"Sunshine config: {conf_dir}")
     log(f"Images root:     {images_root}")
 
-    # Backup apps.json (one per run)
+    # Fresh file each run: keep a backup for troubleshooting
     if os.path.exists(apps_json):
         try:
-            shutil.copy2(apps_json, apps_json_bak)
-            log(f"Backup created: {apps_json_bak}")
+            shutil.copy2(apps_json, f"{apps_json}.bak")
+            log(f"Backup saved: {apps_json}.bak")
         except Exception as e:
             log(f"Warning: failed to backup apps.json: {e}")
-    else:
-        write_json(apps_json, {"apps": []})
-        log("Initialized new apps.json")
 
-    # Load existing
-    existing = ensure_obj_with_apps(read_json(apps_json, {"apps": []}))
+    # Read toggles from environment
+    IMPORT_STEAM = getenv_flag("IMPORT_STEAM", True)
+    IMPORT_HEROIC = getenv_flag("IMPORT_HEROIC", True)
 
-    # Settings snapshot from environment (importers look up flags from env)
+    enabled_importers = []
+    if IMPORT_STEAM:
+        enabled_importers.append("steam")
+    if IMPORT_HEROIC:
+        enabled_importers.append("heroic")
+
     settings: Dict[str, Any] = dict(os.environ)
 
-    # Run importers
-    steam_apps = import_steam(home, conf_dir, images_dir_steam, settings)
-    heroic_apps = import_heroic(home, conf_dir, images_dir_heroic, settings)
+    # Collect apps from enabled importers
+    apps = []
+    if IMPORT_STEAM:
+        apps += import_steam(home, conf_dir, images_dir_steam, settings)
+    else:
+        log("Steam importer disabled.")
+    if IMPORT_HEROIC:
+        apps += import_heroic(home, conf_dir, images_dir_heroic, settings)
+    else:
+        log("Heroic importer disabled.")
 
-    merged = list(existing["apps"]) + steam_apps + heroic_apps
-    write_json(apps_json, {"apps": merged})
+    apps += import_launchers(home, conf_dir, os.path.join(conf_dir, "images", "launchers"), settings)
 
-    log(f"Imported: Steam={len(steam_apps)} Heroic={len(heroic_apps)} | Total apps now: {len(merged)}")
+    # --- ENV BLOCK FIRST ---
+    # Default PATH augmentation as requested; allow optional extra append via ENV_PATH_APPEND.
+    env_block = {
+        "PATH": "$(PATH):$(HOME)/.local/bin" + ((":" + os.getenv("ENV_PATH_APPEND")) if os.getenv("ENV_PATH_APPEND") else "")
+    }
+
+    # Fresh write: "env" then "apps" (then meta for visibility)
+    payload = {
+        "env": env_block,
+        "apps": apps,
+        "meta": {
+            "generated-by": "bazzite-sunshine-manager",
+            "enabled-importers": enabled_importers,
+        },
+    }
+    write_json(apps_json, payload)
+    log(f"Wrote {len(apps)} apps. Enabled importers: {', '.join(enabled_importers) or 'none'}")
+
     return 0
 
 

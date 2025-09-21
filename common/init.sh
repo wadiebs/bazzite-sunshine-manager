@@ -1,11 +1,57 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
 DEST="/var/home/steam/.config/sunshine/helper"
 TMP="$(mktemp -d)"
 
-curl -L -o "$TMP/repo.zip" https://github.com/wadiebs/bazzite-sunshine-manager/archive/refs/heads/main.zip
+say() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
+cleanup() {
+  say "Cleaning up temporary files..."
+  rm -rf "$TMP"
+}
+trap cleanup EXIT
+
+# --- Pre-flight checks ---
+for bin in curl unzip rsync; do
+  command -v "$bin" >/dev/null 2>&1 || { echo "Error: '$bin' is required but not installed."; exit 1; }
+done
+
+say "Destination: $DEST"
+say "Working directory: $TMP"
+
+# --- Download ---
+say "Downloading repository archive..."
+curl -fsSL -o "$TMP/repo.zip" "https://github.com/wadiebs/bazzite-sunshine-manager/archive/refs/heads/main.zip"
+say "Download complete."
+
+# --- Unzip ---
+say "Unpacking archive..."
 unzip -q "$TMP/repo.zip" -d "$TMP"
+say "Unpack complete."
 
+# --- Prepare destination ---
+say "Creating destination directory (if needed)..."
 mkdir -p "$DEST"
-rsync -a --delete --exclude=".git" --exclude=".github" "$TMP"/bazzite-sunshine-manager-*/ "$DEST/"
 
-chown -R steam:steam "$DEST"
-rm -rf "$TMP"
+# --- Sync files ---
+SRC_DIR="$(echo "$TMP"/bazzite-sunshine-manager-*)"
+if [ ! -d "$SRC_DIR" ]; then
+  echo "Error: Source directory not found at '$SRC_DIR'."
+  exit 1
+fi
+
+say "Syncing files to $DEST ..."
+rsync -a --delete --exclude=".git" --exclude=".github" "$SRC_DIR/" "$DEST/"
+say "Sync complete."
+
+# --- Ownership ---
+CURRENT_USER="$(id -un)"
+CURRENT_GROUP="$(id -gn)"
+say "Setting ownership to $CURRENT_USER:$CURRENT_GROUP ..."
+if chown -R "$CURRENT_USER:$CURRENT_GROUP" "$DEST" 2>/dev/null; then
+  say "Ownership set successfully."
+else
+  say "Warning: Failed to change ownership. You may need to run this with sudo."
+fi
+
+say "All done! Files are now in: $DEST"

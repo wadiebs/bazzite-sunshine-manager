@@ -28,7 +28,7 @@ RESTART=0
 : "${IMPORT_LAUNCHERS:=1}"
 
 # Resolve paths
-SCRIPT_DIR="/var/home/steam/.config/sunshine/helper/"
+SCRIPT_DIR="/var/home/steam/.config/sunshine/helper"
 PY_SCRIPT="${SCRIPT_DIR}/sunshine-import.py"
 
 # Check requirements

@@ -33,6 +33,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Adjust if your layout differs.
 PY_SCRIPT="${SCRIPT_DIR}/sunshine-import.py"
 
+# Check requirements
+REQS="${SCRIPT_DIR}/requirements.txt"
+if [[ -f "$REQS" ]]; then
+  if ! "$PYTHON" -c "import PIL" >/dev/null 2>&1; then
+    echo "[bootstrap] Installing requirements from $REQS ..." >&2
+    "$PYTHON" -m pip install --user -r "$REQS"
+  fi
+fi
+
 usage() { sed -n '1,50p' "$0" | sed -n '1,30p' >&2; exit 1; }
 
 ARGS_TO_PY=()

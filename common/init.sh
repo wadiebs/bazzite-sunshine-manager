@@ -54,4 +54,9 @@ else
   say "Warning: Failed to change ownership. You may need to run this with sudo."
 fi
 
+# --- Permissions ---
+say "Setting permissions to sunshine-import.sh"
+chmod +x "$DEST/sunshine-import.sh"
+
+
 say "All done! Files are now in: $DEST"

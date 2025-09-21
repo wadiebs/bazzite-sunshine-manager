@@ -2,7 +2,6 @@
 """
 Bazzite Sunshine Manager — fresh write with env first
 
-- Auto-installs requirements if missing (no virtualenv needed)
 - Recreates Sunshine's apps.json on every run
 - JSON order: "env" first, then "apps" (then optional "meta")
 """
@@ -13,39 +12,6 @@ import shutil
 import pathlib
 from pathlib import Path
 from typing import Dict, Any
-
-# -----------------------------
-# Bootstrap: ensure requirements
-# -----------------------------
-def ensure_requirements():
-    try:
-        import PIL  # noqa: F401
-        return
-    except Exception:
-        pass
-
-    import subprocess
-    req = pathlib.Path(__file__).with_name("requirements.txt")
-    if not req.exists():
-        print("No requirements.txt found; continuing without auto-install...", file=sys.stderr)
-        return
-
-    cmd = [sys.executable, "-m", "pip", "install", "--user", "-r", str(req)]
-    print(f"Installing requirements: {' '.join(cmd)}", file=sys.stderr)
-    try:
-        subprocess.check_call(cmd)
-        import site, importlib
-        usp = site.getusersitepackages()
-        if usp not in sys.path:
-            sys.path.append(usp)
-        importlib.invalidate_caches()
-        import PIL  # noqa: F401
-    except Exception as e:
-        print(f"[ERROR] Failed to install requirements: {e}", file=sys.stderr)
-        print(f"Tip: {sys.executable} -m pip install -r {req}", file=sys.stderr)
-        sys.exit(1)
-
-ensure_requirements()
 
 # Safe to import local modules now
 from common.utils import log, write_json  # noqa: E402

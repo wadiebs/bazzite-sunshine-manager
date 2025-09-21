@@ -58,5 +58,10 @@ fi
 say "Setting permissions to sunshine-import.sh"
 chmod +x "$DEST/sunshine-import.sh"
 
+# --- Create/refresh the symlink in $HOME ---
+echo "Create Symlink for ${DEST_HOME} -> ${SRC_HELPER}"
+ln -sfn "$DEST/sunshine-import.sh" "${HOME}/sunshine-import.sh"
+
+
 
 say "All done! Files are now in: $DEST"

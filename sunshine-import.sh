@@ -42,6 +42,26 @@ if [[ -f "$REQS" ]]; then
   fi
 fi
 
+# Defaults (can be overridden by flags below)
+: "${SGDB_ENABLE:=1}"
+: "${SGDB_TIMEOUT:=12}"
+: "${SGDB_API_KEY:=}"
+
+# Parse args (extract SGDB flags; pass the rest to Python)
+PY_ARGS=()
+while (( "$#" )); do
+  case "$1" in
+    --sgdb-key)
+      SGDB_API_KEY="${2:-}"; shift 2 ;;
+    --sgdb-enable)
+      SGDB_ENABLE="${2:-1}"; shift 2 ;;
+    --sgdb-timeout)
+      SGDB_TIMEOUT="${2:-12}"; shift 2 ;;
+    --) shift; PY_ARGS+=("$@"); break ;;
+    *)  PY_ARGS+=("$1"); shift ;;
+  esac
+done
+
 usage() { sed -n '1,50p' "$0" | sed -n '1,30p' >&2; exit 1; }
 
 ARGS_TO_PY=()
@@ -75,7 +95,7 @@ if ! command -v "$PYTHON" >/dev/null 2>&1; then
 fi
 
 # Environment toggles exported for the Python script
-export IMPORT_STEAM IMPORT_HEROIC IMPORT_LAUNCHERS
+export IMPORT_STEAM IMPORT_HEROIC IMPORT_LAUNCHERS SGDB_API_KEY SGDB_ENABLE SGDB_TIMEOUT
 
 echo "[sunshine-import] IMPORT_STEAM=$IMPORT_STEAM IMPORT_HEROIC=$IMPORT_HEROIC IMPORT_LAUNCHERS=$IMPORT_LAUNCHERS" >&2
 if [[ -n "${SUNSHINE_CONF_DIR:-}" ]]; then

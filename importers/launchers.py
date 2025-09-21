@@ -13,8 +13,8 @@ ABS_IMAGES_DIR = "/var/home/steam/.config/sunshine/images"
 POSTERS = {
     "desktop": "https://github.com/wadiebs/bazzite-sunshine-manager/blob/main/common/posters/desktop.png",
     "steam":   "https://github.com/wadiebs/bazzite-sunshine-manager/blob/main/common/posters/steam.png",
-    "heroic":  "https://github.com/wadiebs/bazzite-sunshine-manager/blob/main/common/posters/Heroic.png",
-    "reboot":  "https://github.com/wadiebs/bazzite-sunshine-manager/blob/main/common/posters/Reboot.png",
+    "heroic":  "https://github.com/wadiebs/bazzite-sunshine-manager/blob/main/common/posters/heroic.png",
+    "reboot":  "https://github.com/wadiebs/bazzite-sunshine-manager/blob/main/common/posters/reboot.png",
 }
 
 NAMES = {

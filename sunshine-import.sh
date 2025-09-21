@@ -11,6 +11,7 @@
 #   --restart                      Restart Sunshine after import (systemctl --user restart sunshine.service)
 #   --python PY                    Python interpreter to use (default: python3)
 #   --conf-dir DIR                 Force Sunshine config dir (sets SUNSHINE_CONF_DIR for your script to read)
+#   --sgdb-key "YOUR_STEAMGRID_API" Enable SteamGrid to download game covers (IMPORT_HEROIC=1/0)
 #   -h, --help                     Show help
 #
 # Examples:

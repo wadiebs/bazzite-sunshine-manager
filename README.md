@@ -6,11 +6,10 @@ It scans local libraries, applies blacklists, fetches cover art (Steam CDN or St
 this tool is optimized to run under [Bazzite](https://github.com/ublue-os/bazzite).
 
 ## ✨ Features
-- Steam & Heroic importers (Lutris planned)
+- Import installed Steam games
+- Import installed Heroic games (GOG, Epic, Standealone)
 - Blacklist by AppID or regex
-- Cover art via Steam CDN / SGDB
-- Safe `apps.json` backup and merge
-- Modular design with separate importers
+- Cover art via Steam CDN, Heroic cache or SteamGrid
 
 ## 🚀 Quick start
 Ensure sunshine is enabled
@@ -19,7 +18,7 @@ ujust setup-sunshine
 ```
 Choice enable is not enabled yet
 
-launch the init script, it will:
+Launch the init script, it will:
 - create clone the repository into /var/home/steam/.config/sunshine/helper and configure ownership/permissions
 - create a symbolic link for sunshine-import.sh in the home directory for easy further use
 ```bash

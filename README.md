@@ -19,17 +19,12 @@ ujust setup-sunshine
 ```
 Choice enable is not enabled yet
 
-Go to a folder where you want to download this tool such as Scripts directory under home
+launch the init script, it will:
+- create clone the repository into /var/home/steam/.config/sunshine/helper
+- create a symbolic link for sunshine-import.sh in the home directory for easy further use
 ```bash
-mkdir -p "$HOME/Scripts" && cd "$HOME/Scripts"
+curl -fsSL https://raw.githubusercontent.com/wadiebs/bazzite-sunshine-manager/main/init.sh | bash
 ```
-
-Clone the repository
-```bash
-git clone https://github.com/wadiebs/bazzite-sunshine-manager.git
-cd bazzite-sunshine-manager
-```
-
 To run the import of games to sunshine process, run:
 ```bash
 python sunshine-import.py

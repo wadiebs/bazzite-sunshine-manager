@@ -29,3 +29,9 @@ To run the import of games to sunshine process, run:
 ```bash
 ${HOME}/sunshine-import.sh
 ```
+To run it with steamgrid enabled:
+```bash
+${HOME}/sunshine-import.sh --sgdb-key "YOUR_STEAMGRID_API"
+```
+
+

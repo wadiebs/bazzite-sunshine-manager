@@ -23,7 +23,7 @@ launch the init script, it will:
 - create clone the repository into /var/home/steam/.config/sunshine/helper and configure ownership/permissions
 - create a symbolic link for sunshine-import.sh in the home directory for easy further use
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wadiebs/bazzite-sunshine-manager/main/init.sh | bash
+curl -fsSL https://raw.githubusercontent.com/wadiebs/bazzite-sunshine-manager/main/common/init.sh | bash
 ```
 To run the import of games to sunshine process, run:
 ```bash

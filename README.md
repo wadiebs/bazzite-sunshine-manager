@@ -27,5 +27,5 @@ curl -fsSL https://raw.githubusercontent.com/wadiebs/bazzite-sunshine-manager/ma
 ```
 To run the import of games to sunshine process, run:
 ```bash
-python sunshine-import.py
+${HOME}/sunshine-import.sh
 ```

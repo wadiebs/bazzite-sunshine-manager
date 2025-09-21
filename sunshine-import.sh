@@ -28,9 +28,7 @@ RESTART=0
 : "${IMPORT_LAUNCHERS:=1}"
 
 # Resolve paths
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# If this wrapper lives in repo root next to sunshine-import.py, this will resolve correctly.
-# Adjust if your layout differs.
+SCRIPT_DIR="/var/home/steam/.config/sunshine/helper/"
 PY_SCRIPT="${SCRIPT_DIR}/sunshine-import.py"
 
 # Check requirements

@@ -7,6 +7,8 @@ import re
 import json
 import glob
 from pathlib import Path
+import urllib.parse
+import shutil
 from typing import List, Dict, Any
 
 from common.utils import log, read_json, slugify, yn
@@ -479,26 +481,45 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                 exe   = it.get("executable") or it.get("exe") or it.get("bin") or ""
                 workd = it.get("workingDir") or it.get("workDir") or (os.path.dirname(exe) if exe else home)
                 cover_url = it.get("art_cover") or it.get("imageUrl") or it.get("imagePath") or ""
-                out_cover = ""
-                if cover_url:
-                    tmp_src = download_temp(cover_url)
+            out_cover = ""
+            if cover_url:
+                dst_dir = images_dir_sideload
+                os.makedirs(dst_dir, exist_ok=True)
+                base = slugify(sid or title or "sideload")
+                dst = os.path.join(dst_dir, f"{base}.png")
+
+                tmp_src = ""
+                try:
+                    if cover_url.startswith("file:///"):
+                        # Local file path (prefer copying over downloading)
+                        parsed = urllib.parse.urlparse(cover_url)
+                        local_path = urllib.parse.unquote(parsed.path)  # handle spaces/utf-8
+                        if os.path.exists(local_path):
+                            tmp_src = local_path  # copy/convert from this path
+                        else:
+                            log(f"Sideload cover not found at local path: {local_path}")
+                    else:
+                        # Remote URL: download to temp
+                        tmp_src = download_temp(cover_url)
+
                     if tmp_src:
-                        base = slugify(sid or title or "sideload")
-                        dst = os.path.join(images_dir_sideload, f"{base}.png")
+                        # Try to convert/fit to 600x900; if that fails, copy as-is
                         if stretch_png_600x900(tmp_src, dst):
                             out_cover = dst
                         else:
                             try:
-                                # fallback direct copy
-                                import shutil as _sh
-                                _sh.copy2(tmp_src, dst)
+                                shutil.copy2(tmp_src, dst)
                                 out_cover = dst
                             except Exception:
                                 out_cover = ""
-                        try:
+                finally:
+                    # Only remove temp files we actually downloaded
+                    try:
+                        if tmp_src and not cover_url.startswith("file:///"):
                             os.remove(tmp_src)
-                        except Exception:
-                            pass
+                    except Exception:
+                        pass
+
                 add_heroic(title or sid, sid, workd, "Sideload", image_path=out_cover)
                 count += 1
             log(f"Sideload parsed: {count} entries")

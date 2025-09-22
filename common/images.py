@@ -1,18 +1,49 @@
-import os, re, urllib.request, tempfile, shutil, subprocess
+import os, re, urllib.request, urllib.parse, tempfile, shutil, subprocess
 from PIL import Image  # pillow is required
 from .utils import have_cmd
 
 def download_temp(url_or_path: str, suffix: str = "") -> str:
+    """
+    Returns a path to a temporary file containing the referenced content.
+    Supports:
+      - http(s)://...
+      - file:///absolute/path
+      - /absolute/path
+      - ./relative (will be rejected; keep to absolute for local)
+    """
     try:
+        if not url_or_path:
+            return ""
+
+        # Handle file:// scheme explicitly
+        if url_or_path.startswith("file://"):
+            parsed = urllib.parse.urlparse(url_or_path)
+            local_path = urllib.parse.unquote(parsed.path)
+            if os.path.isabs(local_path) and os.path.exists(local_path):
+                fd, tmp = tempfile.mkstemp(prefix="sg_", suffix=suffix or os.path.splitext(local_path)[1] or ".img")
+                os.close(fd); shutil.copy2(local_path, tmp); return tmp
+            return ""
+
+        # HTTP(S)
         if re.match(r"^https?://", url_or_path, re.I):
-            fd, tmp = tempfile.mkstemp(prefix="sg_", suffix=suffix or os.path.splitext(url_or_path)[1] or ".img")
-            os.close(fd); urllib.request.urlretrieve(url_or_path, tmp); return tmp
-        if os.path.exists(url_or_path):
+            ext = os.path.splitext(urllib.parse.urlparse(url_or_path).path)[1] or ".img"
+            fd, tmp = tempfile.mkstemp(prefix="sg_", suffix=suffix or ext)
+            os.close(fd)
+            req = urllib.request.Request(url_or_path, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                with open(tmp, "wb") as f:
+                    f.write(resp.read())
+            return tmp
+
+        # Direct filesystem path (prefer absolute; skip relative to avoid surprises)
+        if os.path.isabs(url_or_path) and os.path.exists(url_or_path):
             fd, tmp = tempfile.mkstemp(prefix="sg_", suffix=suffix or os.path.splitext(url_or_path)[1] or ".img")
             os.close(fd); shutil.copy2(url_or_path, tmp); return tmp
+
     except Exception:
         return ""
     return ""
+
 
 def save_bytes_to(path: str, data: bytes):
     os.makedirs(os.path.dirname(path), exist_ok=True)

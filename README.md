@@ -20,14 +20,15 @@ Choice enable is not enabled yet
 
 Launch the init script, it will:
 - create clone the repository into /var/home/steam/.config/sunshine/helper and configure ownership/permissions
-- create a symbolic link for sunshine-import.sh in the home directory for easy further use
+- create a symbolic link for sunshine-import.sh in `~/.local/bin` for easy further use
 ```bash
 curl -fsSL https://raw.githubusercontent.com/wadiebs/bazzite-sunshine-manager/main/common/init.sh | bash
 ```
 To run the import of games to sunshine process, run:
 ```bash
-${HOME}/sunshine-import.sh
+sunshine-import
 ```
+
 To run it with steamgrid enabled:
 ```bash
 ${HOME}/sunshine-import.sh --sgdb-key "YOUR_STEAMGRID_API"

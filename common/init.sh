@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-DEST="/var/home/steam/.config/sunshine/helper"
+DEST="$HOME/.config/sunshine/helper"
 TMP="$(mktemp -d)"
 
 say() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
@@ -58,8 +58,11 @@ fi
 say "Setting permissions to sunshine-import.sh"
 chmod +x "$DEST/sunshine-import.sh"
 
-# --- Create/refresh the symlink in $HOME ---
+# --- Create/refresh the symlink in $HOME/.local/bin (create this folder if it doesn't exist) ---
+if [ ! -d "${HOME}/.local/bin" ]; then
+  mkdir "${HOME}/.local/bin"
+fi
 say "Create Symlink for sunshine-import.sh"
-ln -sfn "$DEST/sunshine-import.sh" "${HOME}/sunshine-import.sh"
+ln -sfn "$DEST/sunshine-import.sh" "${HOME}/.local/bin/sunshine-import"
 
 say "All done! Files are now in: $DEST"

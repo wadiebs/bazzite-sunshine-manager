@@ -46,25 +46,10 @@ fi
 : "${SGDB_TIMEOUT:=12}"
 : "${SGDB_API_KEY:=}"
 
-# Parse args (extract SGDB flags; pass the rest to Python)
-PY_ARGS=()
-while (( "$#" )); do
-  case "$1" in
-    --sgdb-key)
-      SGDB_API_KEY="${2:-}"; shift 2 ;;
-    --sgdb-enable)
-      SGDB_ENABLE="${2:-1}"; shift 2 ;;
-    --sgdb-timeout)
-      SGDB_TIMEOUT="${2:-12}"; shift 2 ;;
-    --) shift; PY_ARGS+=("$@"); break ;;
-    *)  PY_ARGS+=("$1"); shift ;;
-  esac
-done
-
 usage() { sed -n '1,50p' "$0" | sed -n '1,30p' >&2; exit 1; }
 
+# Parse all arguments in a single loop
 ARGS_TO_PY=()
-
 while (( "$#" )); do
   case "$1" in
     --steam)        IMPORT_STEAM=1; shift ;;
@@ -76,6 +61,9 @@ while (( "$#" )); do
     --restart)      RESTART=1; shift ;;
     --python)       PYTHON="${2:-}"; shift 2 ;;
     --conf-dir)     export SUNSHINE_CONF_DIR="${2:-}"; shift 2 ;;
+    --sgdb-key)     SGDB_API_KEY="${2:-}"; shift 2 ;;
+    --sgdb-enable)  SGDB_ENABLE="${2:-1}"; shift 2 ;;
+    --sgdb-timeout) SGDB_TIMEOUT="${2:-12}"; shift 2 ;;
     -h|--help)      usage ;;
     --)             shift; ARGS_TO_PY+=("$@"); break ;;
     *)              ARGS_TO_PY+=("$1"); shift ;;

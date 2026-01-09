@@ -1,9 +1,23 @@
 #!/usr/bin/env python3
 """
-Bazzite Sunshine Manager — fresh write with env first
+Bazzite Sunshine Manager
 
-- Recreates Sunshine's apps.json on every run
-- JSON order: "env" first, then "apps" (then optional "meta")
+Author: wadiebs
+Date: January 2026
+Version: 2.0
+
+Description:
+Automated importer and manager for Sunshine streaming app configurations.
+This tool recreates Sunshine's apps.json with proper structure and organization.
+
+Features:
+- Automatic detection of Sunshine configuration directory (Flatpak + native)
+- Imports applications from multiple sources (Steam, Heroic Launcher, custom launchers)
+- Maintains proper JSON structure with "env" section first, followed by "apps"
+- Comprehensive environment variable and application mapping
+- Blacklist support for filtering unwanted applications
+- Modular architecture for easy extension of import sources
+- Support for poster/thumbnail artwork organization
 """
 
 import sys

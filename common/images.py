@@ -62,6 +62,11 @@ def stretch_png_600x900(src_path: str, dst_png: str) -> bool:
     if have_cmd("convert"):
         try:
             subprocess.run(["convert", src_path, "-resize", "600x900!", dst_png], check=True)
+            # Ensure output is PNG
+            if not dst_png.lower().endswith('.png'):
+                png_dst = os.path.splitext(dst_png)[0] + ".png"
+                if os.path.exists(dst_png):
+                    os.rename(dst_png, png_dst)
             return True
         except Exception:
             pass
@@ -69,12 +74,24 @@ def stretch_png_600x900(src_path: str, dst_png: str) -> bool:
     if have_cmd("ffmpeg"):
         try:
             subprocess.run(["ffmpeg","-y","-loglevel","error","-i",src_path,"-vf","scale=600:900",dst_png], check=True)
+            # Ensure output is PNG
+            if not dst_png.lower().endswith('.png'):
+                png_dst = os.path.splitext(dst_png)[0] + ".png"
+                if os.path.exists(dst_png):
+                    os.rename(dst_png, png_dst)
             return True
         except Exception:
             pass
-    # fallback copy
+    # fallback copy - convert to PNG
     try:
-        shutil.copy2(src_path, dst_png)
+        fd, tmp = tempfile.mkstemp(prefix="img_", suffix=os.path.splitext(src_path)[1])
+        os.close(fd)
+        shutil.copy2(src_path, tmp)
+        im = Image.open(tmp)
+        if im.mode not in ("RGB", "RGBA"): im = im.convert("RGB")
+        im.save(dst_png, format="PNG")
+        try: os.remove(tmp)
+        except Exception: pass
         return True
     except Exception:
         return False

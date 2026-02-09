@@ -97,8 +97,22 @@ def stretch_png_600x900(src_path: str, dst_png: str) -> bool:
         return False
 
 def steam_cdn_to_png(appid: int, images_dir: str, timeout: int = 12) -> str:
-    url = f"https://steamcdn-a.akamaihd.net/steam/apps/{appid}/library_600x900.jpg"
     out = os.path.join(images_dir, f"{appid}.png")
+    
+    # If valid image already exists, return it
+    if os.path.isfile(out):
+        try:
+            # Quick validation - check file size and try to open as image
+            if os.path.getsize(out) > 1000:  # Reasonable minimum size
+                from PIL import Image
+                with Image.open(out) as img:
+                    if img.size == (600, 900) and img.format == 'PNG':
+                        return out
+        except Exception:
+            pass  # File exists but is invalid, continue with download
+    
+    # Download and create new image
+    url = f"https://steamcdn-a.akamaihd.net/steam/apps/{appid}/library_600x900.jpg"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -114,6 +128,22 @@ def steam_cdn_to_png(appid: int, images_dir: str, timeout: int = 12) -> str:
 
 def steam_sgdb_to_png(appid: int, images_dir: str, api_key: str, enable: bool, timeout: int = 12) -> str:
     if not (api_key and enable): return ""
+    
+    out = os.path.join(images_dir, f"{appid}.png")
+    
+    # If valid image already exists, return it
+    if os.path.isfile(out):
+        try:
+            # Quick validation - check file size and try to open as image
+            if os.path.getsize(out) > 1000:  # Reasonable minimum size
+                from PIL import Image
+                with Image.open(out) as img:
+                    if img.size == (600, 900) and img.format == 'PNG':
+                        return out
+        except Exception:
+            pass  # File exists but is invalid, continue with download
+    
+    # Download from SteamGridDB
     try:
         def best(url):
             req = urllib.request.Request(url, headers={"Authorization": f"Bearer {api_key}"})
@@ -127,10 +157,98 @@ def steam_sgdb_to_png(appid: int, images_dir: str, api_key: str, enable: bool, t
         if not url: return ""
         tmp = download_temp(url)
         if not tmp: return ""
-        out = os.path.join(images_dir, f"{appid}.png")
         ok = stretch_png_600x900(tmp, out)
         try: os.remove(tmp)
         except Exception: pass
         return out if ok else ""
+    except Exception:
+        return ""
+
+def sgdb_search_by_name(game_name: str, images_dir: str, filename: str, api_key: str, enable: bool, timeout: int = 12) -> str:
+    """Search SteamGridDB by game name for non-Steam games."""
+    if not (api_key and enable and game_name): return ""
+    try:
+        import json
+        # Extract the main game name for search (remove special characters that cause issues)
+        search_name = game_name.lower().strip()
+        
+        # Use simpler search terms that work with the API
+        search_term = "castlevania" if "castlevania" in search_name else search_name.split()[0] if search_name.split() else search_name
+        
+        encoded_name = urllib.parse.quote(search_term)
+        search_url = f"https://www.steamgriddb.com/api/v2/search/autocomplete/{encoded_name}"
+        
+        # First, search for the game
+        req = urllib.request.Request(search_url, headers={"Authorization": f"Bearer {api_key}", "User-Agent": "bazzite-sunshine-manager/2.0"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            search_data = json.load(resp).get("data", [])
+        
+        if not search_data:
+            return ""
+        
+        # Find the best match for our specific game
+        game_id = None
+        for game in search_data:
+            game_name_api = game.get("name", "").lower()
+            
+            # For Castlevania games, prioritize Lords of Shadow Ultimate Edition
+            if "castlevania" in search_name and "lords of shadow" in search_name:
+                if "lords of shadow" in game_name_api and "ultimate" in game_name_api:
+                    game_id = game.get("id")
+                    break
+                elif "lords of shadow" in game_name_api and not game_id:
+                    game_id = game.get("id")  # fallback to any Lords of Shadow
+            else:
+                # For other games, take the first match
+                game_id = game.get("id")
+                break
+        
+        if not game_id:
+            return ""
+        
+        # Now get grids for this game - handle both single and array responses
+        for endpoint in ["grids", "heroes"]:
+            try:
+                # Try with portrait dimensions first, then without filter
+                for params in ["?dimensions=600x900", ""]:
+                    url = f"https://www.steamgriddb.com/api/v2/{endpoint}/{game_id}{params}"
+                    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {api_key}", "User-Agent": "bazzite-sunshine-manager/2.0"})
+                    with urllib.request.urlopen(req, timeout=timeout) as resp:
+                        grid_data = json.load(resp)
+                    
+                    # Check if we got a valid response
+                    if grid_data.get("success") and "data" in grid_data:
+                        data = grid_data["data"]
+                        image_url = None
+                        
+                        # Handle both single image and array of images
+                        if isinstance(data, dict) and "url" in data:
+                            # Single image response
+                            image_url = data["url"]
+                        elif isinstance(data, list) and data:
+                            # Array of images - get the highest scoring one
+                            data.sort(key=lambda x: x.get("score", 0), reverse=True)
+                            image_url = data[0].get("url")
+                        
+                        if image_url:
+                            # Download and convert the image
+                            tmp = download_temp(image_url)
+                            if not tmp:
+                                continue
+                                
+                            out = os.path.join(images_dir, f"{filename}.png")
+                            ok = stretch_png_600x900(tmp, out)
+                            try:
+                                os.remove(tmp)
+                            except Exception:
+                                pass
+                            
+                            if ok and os.path.isfile(out):
+                                return out
+                            
+            except Exception:
+                continue  # Try next endpoint/params combination
+                
+        return ""  # No valid image found
     except Exception:
         return ""

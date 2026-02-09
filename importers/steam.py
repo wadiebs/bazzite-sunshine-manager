@@ -87,9 +87,10 @@ def import_steam(home: str, conf_dir: str, images_dir: str, settings: Dict[str, 
                 cmd=f'steam -applaunch {appid}'
                 workdir=steam_root
 
-            image_path = steam_cdn_to_png(appid, images_dir, timeout=int(settings.get("SGDB_TIMEOUT",12)))                              or steam_sgdb_to_png(appid, images_dir, api_key=str(settings.get("SGDB_API_KEY","")),
-                                              enable=bool(int(settings.get("SGDB_ENABLE",1))),
-                                              timeout=int(settings.get("SGDB_TIMEOUT",12)))
+            image_path = (steam_cdn_to_png(appid, images_dir, timeout=int(settings.get("SGDB_TIMEOUT", 12))) or
+                          steam_sgdb_to_png(appid, images_dir, api_key=str(settings.get("SGDB_API_KEY", "")),
+                                            enable=bool(int(settings.get("SGDB_ENABLE", 1))),
+                                            timeout=int(settings.get("SGDB_TIMEOUT", 12))))
 
             apps.append({
                 "name": name, "output": "", "cmd": cmd, "working-dir": workdir,

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import List, Dict, Any
 
 from common.utils import log, read_json, slugify, yn
-from common.images import download_temp, stretch_png_600x900
+from common.images import download_temp, stretch_png_600x900, sgdb_search_by_name
 
 
 def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -402,6 +402,23 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                     image_path = png
             except Exception as e:
                 log(f"Heroic JSON cover lookup failed for {gid}: {e}")
+        
+        # Fallback to SteamGridDB search by name if no image found
+        if not image_path:
+            try:
+                api_key = str(settings.get("SGDB_API_KEY", ""))
+                enable = bool(int(settings.get("SGDB_ENABLE", 1)))
+                timeout = int(settings.get("SGDB_TIMEOUT", 12))
+                if api_key and enable:
+                    # Use game title for search, clean filename for storage
+                    search_name = title or gid
+                    safe_filename = re.sub(r"[^A-Za-z0-9._-]+", "_", f"heroic_{gid}").strip("_") or f"heroic_{gid}"
+                    sgdb_png = sgdb_search_by_name(search_name, images_dir, safe_filename, api_key, enable, timeout)
+                    if sgdb_png:
+                        image_path = sgdb_png
+                        log(f"Downloaded SteamGridDB cover for {search_name}")
+            except Exception as e:
+                log(f"SteamGridDB lookup failed for {title or gid}: {e}")
 
         runner = "sideload" if src == "Sideload" else src.lower()
         base = f"heroic://launch?appName={gid}&runner={runner}"

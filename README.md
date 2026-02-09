@@ -18,12 +18,16 @@ ujust setup-sunshine
 ```
 Choice enable is not enabled yet
 
+1. Init command
 Launch the init script, it will:
 - create clone the repository into /var/home/steam/.config/sunshine/helper and configure ownership/permissions
 - create a symbolic link for sunshine-import.sh in `~/.local/bin` for easy further use
+- In case it is not the first run, the init command will update the existing files 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/wadiebs/bazzite-sunshine-manager/main/common/init.sh | bash
 ```
+
+2. Import Script 
 To run the import of games to sunshine process:
 ```bash
 sunshine-import

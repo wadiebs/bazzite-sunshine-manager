@@ -62,4 +62,9 @@ chmod +x "$DEST/sunshine-import.sh"
 say "Create Symlink for sunshine-import.sh"
 ln -sfn "$DEST/sunshine-import.sh" "${HOME}/sunshine-import.sh"
 
+# --- Create symlink in .local/bin for PATH access ---
+say "Create PATH accessible symlink"
+mkdir -p "${HOME}/.local/bin"
+ln -sfn "$DEST/sunshine-import.sh" "${HOME}/.local/bin/sunshine-import"
+
 say "All done! Files are now in: $DEST"

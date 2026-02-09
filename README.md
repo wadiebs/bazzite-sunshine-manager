@@ -24,13 +24,22 @@ Launch the init script, it will:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/wadiebs/bazzite-sunshine-manager/main/common/init.sh | bash
 ```
-To run the import of games to sunshine process, run:
+To run the import of games to sunshine process:
 ```bash
+# Using home directory symlink
 ${HOME}/sunshine-import.sh
+
+# Or using PATH command (if ~/.local/bin is in PATH)
+sunshine-import
 ```
-To run it with steamgrid enabled:
+
+To run it with steamgrid enabled and restart sunshine service after import:
 ```bash
-${HOME}/sunshine-import.sh --sgdb-key "YOUR_STEAMGRID_API"
+# Using home directory symlink  
+${HOME}/sunshine-import.sh --sgdb-key "YOUR_STEAMGRID_API" --restart
+
+# Or using PATH command
+sunshine-import --sgdb-key "YOUR_STEAMGRID_API" --restart
 ```
 
 

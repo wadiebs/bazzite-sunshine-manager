@@ -31,6 +31,7 @@ from typing import Dict, Any
 from common.utils import log, write_json  # noqa: E402
 from importers.steam import import_steam  # noqa: E402
 from importers.heroic import import_heroic  # noqa: E402
+from importers.batocera import import_batocera  # noqa: E402
 from importers.launchers import import_launchers
 
 def detect_sunshine_config_dir(home: str) -> str:
@@ -61,7 +62,8 @@ def main(argv: list[str]) -> int:
     images_dir_steam = os.path.join(images_root, "steam")
     images_dir_heroic = os.path.join(images_root, "heroic")
     images_dir_sideload = os.path.join(images_root, "sideload")
-    for d in (images_dir_steam, images_dir_heroic, images_dir_sideload):
+    images_dir_batocera = os.path.join(images_root, "batocera")
+    for d in (images_dir_steam, images_dir_heroic, images_dir_sideload, images_dir_batocera):
         os.makedirs(d, exist_ok=True)
 
     log(f"Sunshine config: {conf_dir}")
@@ -78,12 +80,15 @@ def main(argv: list[str]) -> int:
     # Read toggles from environment
     IMPORT_STEAM = getenv_flag("IMPORT_STEAM", True)
     IMPORT_HEROIC = getenv_flag("IMPORT_HEROIC", True)
+    IMPORT_BATOCERA = getenv_flag("IMPORT_BATOCERA", True)
 
     enabled_importers = []
     if IMPORT_STEAM:
         enabled_importers.append("steam")
     if IMPORT_HEROIC:
         enabled_importers.append("heroic")
+    if IMPORT_BATOCERA:
+        enabled_importers.append("batocera")
 
     settings: Dict[str, Any] = dict(os.environ)
 
@@ -97,6 +102,10 @@ def main(argv: list[str]) -> int:
         apps += import_heroic(home, conf_dir, images_dir_heroic, settings)
     else:
         log("Heroic importer disabled.")
+    if IMPORT_BATOCERA:
+        apps += import_batocera(home, conf_dir, images_dir_batocera, settings)
+    else:
+        log("Batocera importer disabled.")
 
     apps += import_launchers(home, conf_dir, os.path.join(conf_dir, "images", "launchers"), settings)
 

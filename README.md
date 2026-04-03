@@ -1,6 +1,6 @@
 # Bazzite Sunshine Manager
 
-A lightweight tool to import Steam, Heroic (Epic/GOG), and Lutris games into [Sunshine](https://github.com/LizardByte/Sunshine).  
+A lightweight tool to import Steam, Heroic (Epic/GOG), and Batocera games into [Sunshine](https://github.com/LizardByte/Sunshine).  
 It scans local libraries, applies blacklists, fetches cover art (Steam CDN or SteamGridDB), and safely merges everything into Sunshine’s `apps.json`.
 
 this tool is optimized to run under [Bazzite](https://github.com/ublue-os/bazzite).
@@ -8,6 +8,7 @@ this tool is optimized to run under [Bazzite](https://github.com/ublue-os/bazzit
 ## ✨ Features
 - Import installed Steam games
 - Import installed Heroic games (GOG, Epic, Standealone)
+- Import Batocera ROMs via `gamelist.xml` (all systems or a configurable subset)
 - Blacklist by AppID or regex
 - Cover art via Steam CDN, Heroic cache or SteamGrid
 

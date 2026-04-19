@@ -438,21 +438,44 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
             log(f"No Legendary installed.json at {legendary_installed}")
 
     # --------------------- GOG ---------------------
+    # Match shell script logic: read from GamesConfig directly, use winePrefix basename
     if "gog" in include_sources:
-        if os.path.isfile(gog_installed):
-            data = read_json(gog_installed, {})
-            items = data.get("installed", data if isinstance(data, list) else [])
-            for it in items:
-                if not isinstance(it, dict):
+        if os.path.isdir(games_cfg_dir):
+            seen_gog_ids = set()
+            for cfg_path in glob.glob(os.path.join(games_cfg_dir, "*.json")):
+                cfg = load_json_if(cfg_path)
+                if not isinstance(cfg, dict):
                     continue
-                gid = it.get("appName") or it.get("app_name") or it.get("id")
-                if not gid:
-                    continue
-                install_path = it.get("installPath") or it.get("install_path") or ""
-                title = resolve_gog_title(it, str(gid), install_path, hero_conf_root)
-                add_heroic(title, str(gid), install_path, "GOG")
+                
+                # Get all keys except "version" and "explicit" (matches shell script)
+                game_ids = [k for k in cfg.keys() if k not in ("version", "explicit")]
+                
+                for gid in game_ids:
+                    if not gid or gid in seen_gog_ids:
+                        continue
+                    seen_gog_ids.add(gid)
+                    
+                    game_data = cfg.get(gid)
+                    if not isinstance(game_data, dict):
+                        continue
+                    
+                    # Get winePrefix and extract basename as game name (shell script approach)
+                    prefix = game_data.get("winePrefix", "")
+                    if prefix:
+                        gname = os.path.basename(os.path.normpath(prefix))
+                        if gname and gname not in ("", "/", "."):
+                            title = gname
+                        else:
+                            title = gid
+                    else:
+                        title = gid
+                    
+                    # Use installPath from game_data if available
+                    install_path = game_data.get("installPath", "") or game_data.get("install_path", "")
+                    
+                    add_heroic(title, gid, install_path, "GOG")
         else:
-            log(f"No GOG installed.json at {gog_installed}")
+            log(f"No Heroic GamesConfig at {games_cfg_dir}")
 
     # --------------------- SIDELOAD ---------------------
     if os.path.isfile(sideload_library):

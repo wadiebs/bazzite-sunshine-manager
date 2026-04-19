@@ -92,6 +92,26 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
         s = re.sub(r"\\s+", " ", s).strip()
         return s.title()
 
+    def _as_bool(v):
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, (int, float)):
+            return bool(v)
+        if isinstance(v, str):
+            sv = v.strip().lower()
+            if sv in ("1", "true", "yes", "on"):
+                return True
+            if sv in ("0", "false", "no", "off"):
+                return False
+        return None
+
+    def _existing_path(p: str) -> str:
+        p = str(p or "").strip()
+        if not p:
+            return ""
+        ep = os.path.expandvars(os.path.expanduser(p))
+        return ep if os.path.exists(ep) else ""
+
     def scan_gamescfg_for_title(gid: str, install_path: str) -> str:
         if not os.path.isdir(games_cfg_dir):
             return ""
@@ -388,7 +408,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
 
     heroic_apps: List[Dict[str, Any]] = []
 
-    def add_heroic(title, gid, install_path, src, image_path=""):
+    def add_heroic(title, gid, install_path, src, image_path="", source_json=""):
         # Name blacklist by regex
         if blacklist_name_regex:
             for pat in blacklist_name_regex.split("|"):
@@ -438,7 +458,8 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
             "elevated": False,
             "exit-on-close": True
         })
-        log(f"Found {src}  {yn(title or gid)}")
+        src_hint = f" [{os.path.basename(str(source_json))}]" if source_json else ""
+        log(f"Found {src}{src_hint}  {yn(title or gid)}")
 
     # --------------------- EPIC (Legendary) ---------------------
     if "epic" in include_sources:
@@ -446,7 +467,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
             try:
                 raw = read_json(legendary_installed, {})
                 for gid, val in (raw or {}).items():
-                    install_path = (val or {}).get("install_path")
+                    install_path = _existing_path((val or {}).get("install_path"))
                     if not install_path:
                         continue
                     title = (val or {}).get("title") or (val or {}).get("app_title") or gid
@@ -457,28 +478,52 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
             log(f"No Legendary installed.json at {legendary_installed}")
 
     # --------------------- GOG ---------------------
-    # Match shell script logic: read from GamesConfig directly, use winePrefix basename
+    # Get installed game IDs from gog_store/installed.json, then use GamesConfig for names
     if "gog" in include_sources:
-        if os.path.isdir(games_cfg_dir):
+        # First, get list of installed game IDs
+        installed_gog = {}
+        if os.path.isfile(gog_installed):
+            data = read_json(gog_installed, {})
+            items = data.get("installed", data if isinstance(data, list) else [])
+            for it in items:
+                if not isinstance(it, dict):
+                    continue
+                gid = it.get("appName") or it.get("app_name") or it.get("id")
+                if gid:
+                    installed_gog[str(gid)] = _existing_path(it.get("installPath") or it.get("install_path") or "")
+        
+        if not installed_gog:
+            log("No installed GOG games found in gog_store/installed.json")
+        elif os.path.isdir(games_cfg_dir):
+            # Now iterate GamesConfig and process only installed games
             seen_gog_ids = set()
             for cfg_path in glob.glob(os.path.join(games_cfg_dir, "*.json")):
                 cfg = load_json_if(cfg_path)
                 if not isinstance(cfg, dict):
                     continue
                 
-                # Get all keys except "version" and "explicit" (matches shell script)
+                # Get all keys except "version" and "explicit"
                 game_ids = [k for k in cfg.keys() if k not in ("version", "explicit")]
                 
                 for gid in game_ids:
                     if not gid or gid in seen_gog_ids:
                         continue
-                    seen_gog_ids.add(gid)
-                    
+                    # Only process if this game is actually installed
+                    if gid not in installed_gog:
+                        continue
+
                     game_data = cfg.get(gid)
                     if not isinstance(game_data, dict):
                         continue
                     
-                    # Get winePrefix and extract basename as game name (shell script approach)
+                    # Only process GOG games (check runner field)
+                    runner = str(game_data.get("runner", "")).lower()
+                    if runner != "gog":
+                        continue
+
+                    seen_gog_ids.add(gid)
+                    
+                    # Get winePrefix and extract basename as game name
                     prefix = game_data.get("winePrefix", "")
                     if prefix:
                         gname = os.path.basename(os.path.normpath(prefix))
@@ -490,9 +535,15 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                         title = gid
                     
                     # Use installPath from game_data if available
-                    install_path = game_data.get("installPath", "") or game_data.get("install_path", "")
+                    install_path = _existing_path(
+                        installed_gog.get(gid)
+                        or game_data.get("installPath", "")
+                        or game_data.get("install_path", "")
+                    )
+                    if not install_path:
+                        continue
                     
-                    add_heroic(title, gid, install_path, "GOG")
+                    add_heroic(title, gid, install_path, "GOG", source_json=cfg_path)
         else:
             log(f"No Heroic GamesConfig at {games_cfg_dir}")
 
@@ -520,6 +571,20 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                 title = it.get("title") or it.get("name") or it.get("displayName") or sid
                 exe   = it.get("executable") or it.get("exe") or it.get("bin") or ""
                 workd = it.get("workingDir") or it.get("workDir") or (os.path.dirname(exe) if exe else home)
+
+                # Ensure sideload entries are actually installed.
+                installed_flag = None
+                for k in ("is_installed", "isInstalled", "installed"):
+                    if k in it:
+                        installed_flag = _as_bool(it.get(k))
+                        break
+                exe_path = _existing_path(exe)
+                workd_path = _existing_path(workd)
+                if installed_flag is False:
+                    continue
+                if not exe_path and not workd_path:
+                    continue
+
                 cover_url = it.get("art_cover") or it.get("imageUrl") or it.get("imagePath") or ""
                 out_cover = ""
                 if cover_url:
@@ -541,7 +606,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                             os.remove(tmp_src)
                         except Exception:
                             pass
-                add_heroic(title or sid, sid, workd, "Sideload", image_path=out_cover)
+                add_heroic(title or sid, sid, workd_path or os.path.dirname(exe_path) or workd or home, "Sideload", image_path=out_cover)
                 count += 1
             log(f"Sideload parsed: {count} entries")
         except Exception as e:

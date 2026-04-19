@@ -74,8 +74,14 @@ def import_steam(home: str, conf_dir: str, images_dir: str, settings: Dict[str, 
             except Exception: continue
             m_id=re.search(r'"appid"\s*"(\d+)"',txt)
             m_name=re.search(r'"name"\s*"([^"]+)"',txt)
+            m_dir=re.search(r'"installdir"\s*"([^"]+)"',txt)
             if not (m_id and m_name): continue
             appid=int(m_id.group(1)); name=m_name.group(1); app_count+=1
+            install_dir = m_dir.group(1).strip() if m_dir else ""
+            install_path = os.path.join(sd, "common", install_dir) if install_dir else ""
+            if not install_path or not os.path.isdir(install_path):
+                log(f"Skipping non-installed Steam [{appid}] {name}")
+                continue
             if blacklisted(appid, name):
                 log(f"Skipping blacklisted [{appid}] {name}")
                 continue

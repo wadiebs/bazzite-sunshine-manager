@@ -6,6 +6,7 @@ import os
 import re
 import json
 import glob
+import threading
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -83,6 +84,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
     _title_cache: Dict[str, str] = {}
     _image_url_cache: Dict[str, str] = {}
     _caches_built = False
+    _cache_build_lock = threading.Lock()
 
     # ---------------------- helpers for Heroic/GOG ----------------------
     INVALID_TITLES = {
@@ -191,61 +193,65 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
         nonlocal _caches_built, _title_cache, _image_url_cache
         if _caches_built:
             return _title_cache, _image_url_cache
+
+        with _cache_build_lock:
+            if _caches_built:
+                return _title_cache, _image_url_cache
         
-        app_root = Path(hero_conf_root).parent.parent
-        if not app_root.is_dir():
-            app_root = Path(hero_conf_root)
-        
-        log(f"Building Heroic metadata cache from {app_root}...")
-        title_cache: Dict[str, str] = {}
-        image_cache: Dict[str, str] = {}
-        scanned = 0
-        
-        for jf in app_root.rglob("*.json"):
-            try:
-                data = json.loads(jf.read_text(encoding="utf-8", errors="ignore"))
-                scanned += 1
-            except Exception:
-                continue
-            
-            # Single pass: extract both titles and image URLs
-            for _, node in _walk_json(data):
-                if not isinstance(node, dict):
+            app_root = Path(hero_conf_root).parent.parent
+            if not app_root.is_dir():
+                app_root = Path(hero_conf_root)
+
+            log(f"Building Heroic metadata cache from {app_root}...")
+            title_cache: Dict[str, str] = {}
+            image_cache: Dict[str, str] = {}
+            scanned = 0
+
+            for jf in app_root.rglob("*.json"):
+                try:
+                    data = json.loads(jf.read_text(encoding="utf-8", errors="ignore"))
+                    scanned += 1
+                except Exception:
                     continue
-                
-                # Extract all possible IDs from this node
-                gids = set()
-                for k in _TITLE_ID_KEYS:
-                    if k in node:
-                        val = str(node.get(k) or "")
-                        if val:
-                            gids.add(val)
-                
-                if not gids:
-                    continue
-                
-                # Extract best title from this node
-                title = first_valid_title(*(node.get(f) for f in _TITLE_FIELDS))
-                
-                # Extract best image URL from this node
-                urls = _extract_urls_from_node(node)
-                best_url = ""
-                if urls:
-                    urls.sort(key=lambda t: (t[1], t[2], t[3], t[4], t[5], -len(t[0])), reverse=True)
-                    best_url = urls[0][0] if urls else ""
-                
-                # Store for all IDs found in this node (keep first match)
-                for gid in gids:
-                    if title and gid not in title_cache:
-                        title_cache[gid] = title
-                    if best_url and gid not in image_cache:
-                        image_cache[gid] = best_url
-        
-        log(f"Heroic cache built from {scanned} files: {len(title_cache)} titles, {len(image_cache)} images")
-        _title_cache.update(title_cache)
-        _image_url_cache.update(image_cache)
-        _caches_built = True
-        return _title_cache, _image_url_cache
+
+                # Single pass: extract both titles and image URLs
+                for _, node in _walk_json(data):
+                    if not isinstance(node, dict):
+                        continue
+
+                    # Extract all possible IDs from this node
+                    gids = set()
+                    for k in _TITLE_ID_KEYS:
+                        if k in node:
+                            val = str(node.get(k) or "")
+                            if val:
+                                gids.add(val)
+
+                    if not gids:
+                        continue
+
+                    # Extract best title from this node
+                    title = first_valid_title(*(node.get(f) for f in _TITLE_FIELDS))
+
+                    # Extract best image URL from this node
+                    urls = _extract_urls_from_node(node)
+                    best_url = ""
+                    if urls:
+                        urls.sort(key=lambda t: (t[1], t[2], t[3], t[4], t[5], -len(t[0])), reverse=True)
+                        best_url = urls[0][0] if urls else ""
+
+                    # Store for all IDs found in this node (keep first match)
+                    for gid in gids:
+                        if title and gid not in title_cache:
+                            title_cache[gid] = title
+                        if best_url and gid not in image_cache:
+                            image_cache[gid] = best_url
+
+            log(f"Heroic cache built from {scanned} files: {len(title_cache)} titles, {len(image_cache)} images")
+            _title_cache.update(title_cache)
+            _image_url_cache.update(image_cache)
+            _caches_built = True
+            return _title_cache, _image_url_cache
 
     def _scan_all_jsons_for_title(gid: str) -> str:
         """

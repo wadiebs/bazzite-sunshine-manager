@@ -165,23 +165,27 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
     _TITLE_ID_KEYS = {"appName", "app_name", "appname", "app_id", "appId", "id", "productId", "productID"}
     _TITLE_FIELDS  = ("title", "appTitle", "gameTitle", "name", "displayName")
 
-    # Build a global title cache by scanning all JSONs once (memoized)
+    # Build global caches by scanning all JSONs once (memoized)
     _title_cache: Dict[str, str] = {}
+    _image_url_cache: Dict[str, str] = {}
+    _caches_built = False
     
-    def _build_title_cache() -> Dict[str, str]:
+    def _build_caches() -> tuple[Dict[str, str], Dict[str, str]]:
         """
-        One-time scan of all JSON files to build gid -> title mapping.
-        This is much faster than scanning for each game individually.
+        One-time scan of all JSON files to build both gid->title and gid->image_url mappings.
+        Much faster than separate scans for each cache.
         """
-        if _title_cache:  # Already built
-            return _title_cache
+        global _caches_built
+        if _caches_built:
+            return _title_cache, _image_url_cache
         
         app_root = Path(hero_conf_root).parent.parent
         if not app_root.is_dir():
             app_root = Path(hero_conf_root)
         
-        log(f"Building Heroic title cache from {app_root}...")
-        cache: Dict[str, str] = {}
+        log(f"Building Heroic metadata cache from {app_root}...")
+        title_cache: Dict[str, str] = {}
+        image_cache: Dict[str, str] = {}
         scanned = 0
         
         for jf in app_root.rglob("*.json"):
@@ -191,7 +195,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
             except Exception:
                 continue
             
-            # Walk every node looking for game entries
+            # Single pass: extract both titles and image URLs
             for _, node in _walk_json(data):
                 if not isinstance(node, dict):
                     continue
@@ -204,25 +208,38 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                         if val:
                             gids.add(val)
                 
+                if not gids:
+                    continue
+                
                 # Extract best title from this node
                 title = first_valid_title(*(node.get(f) for f in _TITLE_FIELDS))
                 
-                # Store title for all IDs found in this node
-                if title:
-                    for gid in gids:
-                        if gid not in cache:  # Keep first match
-                            cache[gid] = title
+                # Extract best image URL from this node
+                urls = _extract_urls_from_node(node)
+                best_url = ""
+                if urls:
+                    urls.sort(key=lambda t: (t[1], t[2], t[3], t[4], t[5], -len(t[0])), reverse=True)
+                    best_url = urls[0][0] if urls else ""
+                
+                # Store for all IDs found in this node (keep first match)
+                for gid in gids:
+                    if title and gid not in title_cache:
+                        title_cache[gid] = title
+                    if best_url and gid not in image_cache:
+                        image_cache[gid] = best_url
         
-        log(f"Heroic title cache built: {len(cache)} entries from {scanned} JSON files")
-        _title_cache.update(cache)
-        return _title_cache
+        log(f"Heroic cache built from {scanned} files: {len(title_cache)} titles, {len(image_cache)} images")
+        _title_cache.update(title_cache)
+        _image_url_cache.update(image_cache)
+        _caches_built = True
+        return _title_cache, _image_url_cache
 
     def _scan_all_jsons_for_title(gid: str) -> str:
         """
         Look up title from the pre-built cache.
         """
-        cache = _build_title_cache()
-        return cache.get(gid, "")
+        title_cache, _ = _build_caches()
+        return title_cache.get(gid, "")
 
     def resolve_gog_title(it: dict, gid: str, install_path: str, hero_conf_root: str) -> str:
         # 1) direct fields from installed.json entry
@@ -375,76 +392,12 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
 
         return out
 
-    # Cache for image URLs to avoid re-scanning JSONs for each game
-    _image_url_cache: Dict[str, str] = {}
-    
-    def _build_image_url_cache() -> Dict[str, str]:
-        """
-        One-time scan to build gid -> image_url mapping.
-        """
-        if _image_url_cache:  # Already built
-            return _image_url_cache
-        
-        root = Path(hero_conf_root)
-        if not root.is_dir():
-            return {}
-        
-        log(f"Building Heroic image URL cache...")
-        cache: Dict[str, str] = {}
-        
-        # Collect all JSON files once
-        all_json_data: list[tuple[Path, Any]] = []
-        for jf in root.rglob("*.json"):
-            try:
-                data = json.loads(jf.read_text(encoding="utf-8", errors="ignore"))
-                all_json_data.append((jf, data))
-            except Exception:
-                continue
-        
-        # For each potential GID, find image URLs
-        potential_gids = set()
-        for _, data in all_json_data:
-            for _, node in _walk_json(data):
-                if isinstance(node, dict):
-                    for k in _ID_KEYS:
-                        if k in node:
-                            gid = str(node.get(k) or "")
-                            if gid:
-                                potential_gids.add(gid)
-        
-        log(f"Found {len(potential_gids)} potential game IDs, extracting image URLs...")
-        
-        # For each GID, find the best image URL
-        for gid in potential_gids:
-            exact_hits = []
-            for _, data in all_json_data:
-                for _, node in _walk_json(data):
-                    if isinstance(node, (dict, list)) and _node_has_exact_gid(node, gid):
-                        exact_hits.append(node)
-            
-            ranked = []
-            for node in exact_hits:
-                ranked.extend(_extract_urls_from_node(node))
-            
-            if ranked:
-                ranked.sort(key=lambda t: (t[1], t[2], t[3], t[4], t[5], -len(t[0])), reverse=True)
-                seen = set()
-                for u, *_ in ranked:
-                    if u not in seen:
-                        cache[gid] = u
-                        seen.add(u)
-                        break
-        
-        log(f"Heroic image URL cache built: {len(cache)} entries")
-        _image_url_cache.update(cache)
-        return _image_url_cache
-
     def heroic_find_image_url_for_gid(hero_conf_root: str, gid: str) -> str:
         """
         Look up image URL from the pre-built cache.
         """
-        cache = _build_image_url_cache()
-        return cache.get(gid, "")
+        _, image_cache = _build_caches()
+        return image_cache.get(gid, "")
 
     def heroic_cover_png_from_json(hero_conf_root: str, gid: str, images_dir: str) -> str:
         """

@@ -1,5 +1,5 @@
 # importers/heroic.py
-# Heroic (Epic/GOG/Sideload) importer
+# Heroic (Epic/GOG/Amazon/Sideload) importer
 # Ports the logic from the monolithic sunshine-import.py into the split architecture.
 
 import os
@@ -16,7 +16,7 @@ from common.image_downloader import ImageDownloader
 
 def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
-    Discover Epic/GOG (via Heroic) and Sideload apps and return Sunshine app entries.
+    Discover Epic/GOG/Amazon (via Heroic) and Sideload apps and return Sunshine app entries.
 
     Args:
         home: user home directory
@@ -34,7 +34,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
         log("Heroic import disabled.")
         return []
 
-    include_sources = str(settings.get("INCLUDE_SOURCES", "epic,gog")).lower().split(",")
+    include_sources = [s.strip() for s in str(settings.get("INCLUDE_SOURCES", "epic,gog,amazon")).lower().split(",") if s.strip()]
     blacklist_name_regex = str(settings.get("BLACKLIST_NAME_REGEX", ""))
 
     # Ensure target image dirs exist. Also keep a sibling "sideload" dir like the monolith.
@@ -68,6 +68,13 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
 
     legendary_installed = os.path.join(hero_conf_root, "legendaryConfig", "legendary", "installed.json")
     gog_installed       = os.path.join(hero_conf_root, "gog_store", "installed.json")
+    amazon_candidates   = [
+        os.path.join(hero_conf_root, "nile_library", "library.json"),
+        os.path.join(hero_conf_root, "nile_library", "installed.json"),
+        os.path.join(hero_conf_root, "nile_store", "installed.json"),
+        os.path.join(hero_conf_root, "amazon_store", "installed.json"),
+        os.path.join(hero_conf_root, "nile", "installed.json"),
+    ]
     games_cfg_dir       = os.path.join(hero_conf_root, "GamesConfig")
     sideload_library    = os.path.join(hero_conf_root, "sideload_apps", "library.json")
 
@@ -295,6 +302,77 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
 
         return f"GOG {gid}"
 
+    def resolve_amazon_title(it: dict, gid: str, install_path: str) -> str:
+        t = first_valid_title(
+            it.get("title"), it.get("appTitle"), it.get("gameTitle"),
+            it.get("name"), it.get("displayName"), it.get("productName")
+        )
+        if t:
+            return t
+
+        game = it.get("game") if isinstance(it.get("game"), dict) else {}
+        product = it.get("productInfo") if isinstance(it.get("productInfo"), dict) else {}
+        t = first_valid_title(
+            game.get("title"), game.get("name"),
+            product.get("title"), product.get("name")
+        )
+        if t:
+            return t
+
+        t = _scan_all_jsons_for_title(gid)
+        if t:
+            return t
+
+        if install_path:
+            folder = os.path.basename(os.path.normpath(install_path))
+            if is_valid_game_title(folder):
+                return humanize_slug(folder)
+
+        slug = first_non_empty(
+            it.get("slug"), it.get("appName"), it.get("app_name"),
+            it.get("id"), it.get("asin")
+        )
+        if slug and not str(slug).isdigit():
+            return humanize_slug(str(slug))
+
+        return f"Amazon {gid}"
+
+    def parse_installed_items(raw: Any) -> List[dict]:
+        items: List[dict] = []
+        if isinstance(raw, dict) and isinstance(raw.get("installed"), list):
+            items = raw.get("installed", [])
+        elif isinstance(raw, list):
+            items = raw
+        elif isinstance(raw, dict):
+            for key in ("games", "apps", "library", "entries"):
+                val = raw.get(key)
+                if isinstance(val, list):
+                    items = val
+                    break
+                if isinstance(val, dict):
+                    items = []
+                    for k, v in val.items():
+                        if isinstance(v, dict):
+                            it = dict(v)
+                            it.setdefault("id", str(k))
+                            items.append(it)
+                    if items:
+                        break
+
+            if not items:
+                for k, v in raw.items():
+                    if not isinstance(v, dict):
+                        continue
+                    it = dict(v)
+                    it.setdefault("id", str(k))
+                    items.append(it)
+
+        out: List[dict] = []
+        for it in items:
+            if isinstance(it, dict):
+                out.append(it)
+        return out
+
     # ====== Heroic cached image resolver (for Epic/GOG) ======
     _JSON_URL_RX = re.compile(r"https?://[^\s\"'<>]+", re.I)
 
@@ -437,7 +515,11 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                     log(f"Skip {src} {title} ({gid}) [blacklist]")
                     return
 
-        runner = "sideload" if src == "Sideload" else src.lower()
+        runner_map = {
+            "Sideload": "sideload",
+            "Amazon": "nile",
+        }
+        runner = runner_map.get(src, src.lower())
         base = f"heroic://launch?appName={gid}&runner={runner}"
         if add_silent_param:
             base += "&silent=true"
@@ -574,6 +656,82 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                 if not is_valid_game_title(title):
                     title = humanize_slug(str(gid))
                 add_heroic(title, str(gid), install_path, "GOG", source_json=gog_installed)
+
+    # --------------------- AMAZON (Nile) ---------------------
+    if "amazon" in include_sources:
+        installed_amazon: Dict[str, dict] = {}
+        seen_source = ""
+
+        for amazon_path in amazon_candidates:
+            if not os.path.isfile(amazon_path):
+                continue
+            seen_source = seen_source or amazon_path
+            data = read_json(amazon_path, {})
+            for it in parse_installed_items(data):
+                gid = first_non_empty(
+                    it.get("appName"), it.get("app_name"), it.get("productId"),
+                    it.get("asin"), it.get("id"), it.get("slug")
+                )
+                if not gid:
+                    continue
+
+                installed_flag = None
+                for k in ("is_installed", "isInstalled", "installed"):
+                    if k in it:
+                        installed_flag = _as_bool(it.get(k))
+                        break
+                if installed_flag is False:
+                    continue
+
+                installed_amazon[str(gid)] = it
+
+        for gid, it in installed_amazon.items():
+            install_path = first_non_empty(
+                it.get("installPath"), it.get("install_path"),
+                it.get("path"), it.get("gamePath"), it.get("location")
+            )
+            title = resolve_amazon_title(it, str(gid), install_path)
+            if not is_valid_game_title(title):
+                title = humanize_slug(str(gid))
+            add_heroic(title, str(gid), install_path, "Amazon", source_json=seen_source)
+
+        # Fallback: try to detect Amazon entries from GamesConfig when nile_* json files are missing.
+        if not installed_amazon and os.path.isdir(games_cfg_dir):
+            fallback_count = 0
+            for cfg_path in glob.glob(os.path.join(games_cfg_dir, "*.json")):
+                cfg = load_json_if(cfg_path)
+                if not isinstance(cfg, dict):
+                    continue
+
+                for k, v in cfg.items():
+                    if k in ("version", "explicit") or not isinstance(v, dict):
+                        continue
+
+                    runner_hint = " ".join(
+                        str(v.get(x) or "") for x in ("runner", "store", "source", "platform", "backend")
+                    ).lower()
+                    if "amazon" not in runner_hint and "nile" not in runner_hint:
+                        continue
+
+                    gid = first_non_empty(v.get("appName"), v.get("app_name"), v.get("id"), k)
+                    if not gid:
+                        continue
+
+                    title = first_valid_title(v.get("title"), v.get("name"), v.get("displayName"))
+                    install_path = first_non_empty(v.get("installPath"), v.get("install_path"))
+
+                    if not is_valid_game_title(title):
+                        title = resolve_amazon_title(v, str(gid), install_path)
+                    if not is_valid_game_title(title):
+                        title = humanize_slug(str(gid))
+
+                    add_heroic(title, str(gid), install_path, "Amazon", source_json=cfg_path)
+                    fallback_count += 1
+
+            if fallback_count == 0:
+                log("No installed Amazon games found in Heroic config.")
+        elif not installed_amazon:
+            log("No Amazon/Nile installed.json found in Heroic config.")
         else:
             # Fallback: import from installed.json when GamesConfig is unavailable.
             for gid, it in installed_gog.items():
@@ -670,7 +828,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
             def make_download_func(g_id, g_title, g_src):
                 def download():
                     # Try JSON-only discovery first (Epic/GOG)
-                    if g_src in ("Epic", "GOG"):
+                    if g_src in ("Epic", "GOG", "Amazon"):
                         try:
                             png = heroic_cover_png_from_json(hero_conf_root, str(g_id), images_dir)
                             if png:

@@ -9,7 +9,7 @@
 - USE_DEFAULT_BLACKLIST=1
 - BLACKLIST_IDS=""
 - BLACKLIST_NAME_REGEX=""
-- INCLUDE_SOURCES="epic,gog"
+- INCLUDE_SOURCES="epic,gog,amazon"
 - SYSTEM_APPS_JSON="/usr/share/sunshine/apps.json"
 - FORCE_COLOR=0
 

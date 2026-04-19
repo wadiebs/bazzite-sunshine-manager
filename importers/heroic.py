@@ -438,20 +438,38 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
             log(f"No Legendary installed.json at {legendary_installed}")
 
     # --------------------- GOG ---------------------
-    # Match shell script logic: read from GamesConfig directly, use winePrefix basename
+    # Get installed game IDs from gog_store/installed.json, then use GamesConfig for names
     if "gog" in include_sources:
-        if os.path.isdir(games_cfg_dir):
+        # First, get list of installed game IDs
+        installed_gog_ids = set()
+        if os.path.isfile(gog_installed):
+            data = read_json(gog_installed, {})
+            items = data.get("installed", data if isinstance(data, list) else [])
+            for it in items:
+                if not isinstance(it, dict):
+                    continue
+                gid = it.get("appName") or it.get("app_name") or it.get("id")
+                if gid:
+                    installed_gog_ids.add(str(gid))
+        
+        if not installed_gog_ids:
+            log("No installed GOG games found in gog_store/installed.json")
+        elif os.path.isdir(games_cfg_dir):
+            # Now iterate GamesConfig and process only installed games
             seen_gog_ids = set()
             for cfg_path in glob.glob(os.path.join(games_cfg_dir, "*.json")):
                 cfg = load_json_if(cfg_path)
                 if not isinstance(cfg, dict):
                     continue
                 
-                # Get all keys except "version" and "explicit" (matches shell script)
+                # Get all keys except "version" and "explicit"
                 game_ids = [k for k in cfg.keys() if k not in ("version", "explicit")]
                 
                 for gid in game_ids:
                     if not gid or gid in seen_gog_ids:
+                        continue
+                    # Only process if this game is actually installed
+                    if gid not in installed_gog_ids:
                         continue
                     seen_gog_ids.add(gid)
                     
@@ -459,7 +477,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                     if not isinstance(game_data, dict):
                         continue
                     
-                    # Get winePrefix and extract basename as game name (shell script approach)
+                    # Get winePrefix and extract basename as game name
                     prefix = game_data.get("winePrefix", "")
                     if prefix:
                         gname = os.path.basename(os.path.normpath(prefix))

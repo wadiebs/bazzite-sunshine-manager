@@ -74,7 +74,9 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
     def first_non_empty(*vals) -> str:
         for v in vals:
             if isinstance(v, str) and v.strip():
-                return v.strip()
+                # Filter out "Heroic" as it's not a valid game name
+                if v.strip().lower() != "heroic":
+                    return v.strip()
         return ""
 
     def load_json_if(path):

@@ -71,12 +71,22 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
     sideload_library    = os.path.join(hero_conf_root, "sideload_apps", "library.json")
 
     # ---------------------- helpers for Heroic/GOG ----------------------
+    INVALID_TITLES = {
+        "heroic", "default", "title", "unknown", "game", "gog"
+    }
+
+    def is_valid_game_title(v: str) -> bool:
+        if not isinstance(v, str):
+            return False
+        s = v.strip()
+        if not s:
+            return False
+        return s.lower() not in INVALID_TITLES
+
     def first_non_empty(*vals) -> str:
         for v in vals:
-            if isinstance(v, str) and v.strip():
-                # Filter out "Heroic" as it's not a valid game name
-                if v.strip().lower() != "heroic":
-                    return v.strip()
+            if is_valid_game_title(v):
+                return v.strip()
         return ""
 
     def load_json_if(path):
@@ -534,7 +544,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                     prefix = game_data.get("winePrefix", "")
                     if prefix:
                         gname = os.path.basename(os.path.normpath(prefix))
-                        if gname and gname not in ("", "/", "."):
+                        if is_valid_game_title(gname) and gname not in ("", "/", "."):
                             title = gname
                         else:
                             title = gid
@@ -550,6 +560,11 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                         or game_data.get("install_path", "")
                     )
                     install_path = str(raw_install_path or "")
+
+                    # If GamesConfig gave a generic title (default/title/heroic), resolve from metadata/id.
+                    if not is_valid_game_title(title):
+                        resolved = resolve_gog_title(installed_meta if isinstance(installed_meta, dict) else {}, str(gid), install_path, hero_conf_root)
+                        title = resolved if is_valid_game_title(resolved) else humanize_slug(str(gid))
                     
                     add_heroic(title, gid, install_path, "GOG", source_json=cfg_path)
 
@@ -561,6 +576,8 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                     continue
                 install_path = str(it.get("installPath") or it.get("install_path") or "")
                 title = resolve_gog_title(it, str(gid), install_path, hero_conf_root)
+                if not is_valid_game_title(title):
+                    title = humanize_slug(str(gid))
                 add_heroic(title, str(gid), install_path, "GOG", source_json=gog_installed)
         else:
             # Fallback: import from installed.json when GamesConfig is unavailable.
@@ -569,6 +586,8 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                     continue
                 install_path = str(it.get("installPath") or it.get("install_path") or "")
                 title = resolve_gog_title(it, str(gid), install_path, hero_conf_root)
+                if not is_valid_game_title(title):
+                    title = humanize_slug(str(gid))
                 add_heroic(title, str(gid), install_path, "GOG", source_json=gog_installed)
 
     # --------------------- SIDELOAD ---------------------

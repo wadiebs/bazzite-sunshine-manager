@@ -101,10 +101,23 @@ if [[ $RET -ne 0 ]]; then
 fi
 
 if [[ $RESTART -eq 1 ]]; then
-  echo "[sunshine-import] Restarting Sunshine (user service)..." >&2
-  systemctl --user restart sunshine.service || {
-    echo "[sunshine-import] WARNING: failed to restart Sunshine." >&2
-  }
+  echo "[sunshine-import] Checking which Sunshine service is running..." >&2
+  
+  # Check which sunshine service is active
+  if systemctl --user is-active --quiet sunshine-kms.service; then
+    echo "[sunshine-import] Restarting sunshine-kms.service..." >&2
+    systemctl --user restart sunshine-kms.service || {
+      echo "[sunshine-import] WARNING: failed to restart sunshine-kms.service" >&2
+    }
+  elif systemctl --user is-active --quiet sunshine.service; then
+    echo "[sunshine-import] Restarting sunshine.service..." >&2
+    systemctl --user restart sunshine.service || {
+      echo "[sunshine-import] WARNING: failed to restart sunshine.service" >&2
+    }
+  else
+    echo "[sunshine-import] WARNING: No active Sunshine service found. Skipping restart." >&2
+    echo "[sunshine-import] Please start either sunshine.service or sunshine-kms.service manually." >&2
+  fi
 fi
 
 echo "[sunshine-import] Done." >&2

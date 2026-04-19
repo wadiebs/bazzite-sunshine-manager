@@ -653,6 +653,16 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                     title = humanize_slug(str(gid))
                 add_heroic(title, str(gid), install_path, "GOG", source_json=gog_installed)
         elif installed_gog:
+            # Fallback: import from installed.json when GamesConfig is unavailable.
+            for gid, it in installed_gog.items():
+                if not isinstance(it, dict):
+                    continue
+                install_path = str(it.get("installPath") or it.get("install_path") or "")
+                title = resolve_gog_title(it, str(gid), install_path, hero_conf_root)
+                if not is_valid_game_title(title):
+                    title = humanize_slug(str(gid))
+                add_heroic(title, str(gid), install_path, "GOG", source_json=gog_installed)
+
     # --------------------- AMAZON (Nile) ---------------------
     if "amazon" in include_sources:
         installed_amazon: Dict[str, dict] = {}
@@ -693,7 +703,6 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
 
         # Fallback: try to detect Amazon entries from GamesConfig when nile_* json files are missing.
         if not installed_amazon and os.path.isdir(games_cfg_dir):
-            fallback_count = 0
             for cfg_path in glob.glob(os.path.join(games_cfg_dir, "*.json")):
                 cfg = load_json_if(cfg_path)
                 if not isinstance(cfg, dict):
@@ -722,18 +731,6 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                         title = humanize_slug(str(gid))
 
                     add_heroic(title, str(gid), install_path, "Amazon", source_json=cfg_path)
-                    fallback_count += 1
-
-        else:
-            # Fallback: import from installed.json when GamesConfig is unavailable.
-            for gid, it in installed_gog.items():
-                if not isinstance(it, dict):
-                    continue
-                install_path = str(it.get("installPath") or it.get("install_path") or "")
-                title = resolve_gog_title(it, str(gid), install_path, hero_conf_root)
-                if not is_valid_game_title(title):
-                    title = humanize_slug(str(gid))
-                add_heroic(title, str(gid), install_path, "GOG", source_json=gog_installed)
 
     # --------------------- SIDELOAD ---------------------
     if os.path.isfile(sideload_library):

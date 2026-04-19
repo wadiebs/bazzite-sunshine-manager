@@ -559,8 +559,6 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                     add_heroic(title, gid, install_path, "Epic")
             except Exception as e:
                 log(f"Failed to parse Epic installed.json: {e}")
-        else:
-            log(f"No Legendary installed.json at {legendary_installed}")
 
     # --------------------- GOG ---------------------
     # Get installed game IDs from gog_store/installed.json, then use GamesConfig for names
@@ -591,9 +589,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                 if gid:
                     installed_gog[str(gid)] = it
         
-        if not installed_gog:
-            log("No installed GOG games found in gog_store/installed.json")
-        elif os.path.isdir(games_cfg_dir):
+        if installed_gog and os.path.isdir(games_cfg_dir):
             # Now iterate GamesConfig and process only installed games
             seen_gog_ids = set()
             for cfg_path in glob.glob(os.path.join(games_cfg_dir, "*.json")):
@@ -656,7 +652,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                 if not is_valid_game_title(title):
                     title = humanize_slug(str(gid))
                 add_heroic(title, str(gid), install_path, "GOG", source_json=gog_installed)
-
+        elif installed_gog:
     # --------------------- AMAZON (Nile) ---------------------
     if "amazon" in include_sources:
         installed_amazon: Dict[str, dict] = {}
@@ -728,10 +724,6 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                     add_heroic(title, str(gid), install_path, "Amazon", source_json=cfg_path)
                     fallback_count += 1
 
-            if fallback_count == 0:
-                log("No installed Amazon games found in Heroic config.")
-        elif not installed_amazon:
-            log("No Amazon/Nile installed.json found in Heroic config.")
         else:
             # Fallback: import from installed.json when GamesConfig is unavailable.
             for gid, it in installed_gog.items():

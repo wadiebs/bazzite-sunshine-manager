@@ -93,6 +93,12 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
 
     def first_non_empty(*vals) -> str:
         for v in vals:
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+        return ""
+
+    def first_valid_title(*vals) -> str:
+        for v in vals:
             if is_valid_game_title(v):
                 return v.strip()
         return ""
@@ -142,7 +148,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                 ipath   = str(cfg.get("installPath") or cfg.get("install_path") or "")
                 # match by id or install path
                 if (gid and appname == str(gid)) or (install_path and ipath and os.path.normpath(ipath) == os.path.normpath(install_path)):
-                    t = first_non_empty(
+                    t = first_valid_title(
                         cfg.get("title"),
                         cfg.get("appTitle"),
                         cfg.get("gameTitle"),
@@ -156,13 +162,13 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
 
     def resolve_gog_title(it: dict, gid: str, install_path: str, hero_conf_root: str) -> str:
         # 1) direct fields from installed.json entry
-        t = first_non_empty(it.get("title"), it.get("gameTitle"), it.get("appTitle"))
+        t = first_valid_title(it.get("title"), it.get("gameTitle"), it.get("appTitle"))
         if t:
             return t
 
         # nested game blob
         g = it.get("game") if isinstance(it.get("game"), dict) else {}
-        t = first_non_empty(g.get("title"), g.get("name"))
+        t = first_valid_title(g.get("title"), g.get("name"))
         if t:
             return t
 
@@ -170,7 +176,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
         cfg_exact = os.path.join(games_cfg_dir, f"{gid}.json")
         cfg = load_json_if(cfg_exact)
         if cfg:
-            t = first_non_empty(
+            t = first_valid_title(
                 cfg.get("title"), cfg.get("appTitle"), cfg.get("gameTitle"),
                 (cfg.get("productInfo") or {}).get("title") if isinstance(cfg.get("productInfo"), dict) else ""
             )
@@ -190,7 +196,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                 # Some Heroic versions key library entries by gid directly.
                 if str(gid) in lib_json and isinstance(lib_json.get(str(gid)), dict):
                     o = lib_json.get(str(gid), {})
-                    t = first_non_empty(
+                    t = first_valid_title(
                         o.get("title"),
                         (o.get("game") or {}).get("title") if isinstance(o.get("game"), dict) else "",
                         o.get("gameTitle"),
@@ -214,7 +220,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                     continue
                 ipath = str(o.get("installPath") or o.get("install_path") or "")
                 if id_of(o) == str(gid) or (install_path and ipath and os.path.normpath(ipath) == os.path.normpath(install_path)):
-                    t = first_non_empty(
+                    t = first_valid_title(
                         o.get("title"),
                         (o.get("game") or {}).get("title") if isinstance(o.get("game"), dict) else "",
                         o.get("gameTitle"),
@@ -228,7 +234,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
         for sub in ("gamedetails", "details"):
             details_path = os.path.join(hero_conf_root, "gog_store", sub, f"{gid}.json")
             det = load_json_if(details_path)
-            t = first_non_empty(
+            t = first_valid_title(
                 det.get("title"),
                 (det.get("game") or {}).get("title") if isinstance(det.get("game"), dict) else ""
             )

@@ -477,6 +477,11 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                     if not isinstance(game_data, dict):
                         continue
                     
+                    # Only process GOG games (check runner field)
+                    runner = str(game_data.get("runner", "")).lower()
+                    if runner != "gog":
+                        continue
+                    
                     # Get winePrefix and extract basename as game name
                     prefix = game_data.get("winePrefix", "")
                     if prefix:

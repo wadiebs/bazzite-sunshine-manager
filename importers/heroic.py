@@ -11,6 +11,7 @@ from typing import List, Dict, Any
 
 from common.utils import log, read_json, slugify, yn
 from common.images import download_temp, stretch_png_600x900, sgdb_search_by_name
+from common.image_downloader import ImageDownloader
 
 
 def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -164,46 +165,64 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
     _TITLE_ID_KEYS = {"appName", "app_name", "appname", "app_id", "appId", "id", "productId", "productID"}
     _TITLE_FIELDS  = ("title", "appTitle", "gameTitle", "name", "displayName")
 
-    def _scan_all_jsons_for_title(gid: str) -> str:
+    # Build a global title cache by scanning all JSONs once (memoized)
+    _title_cache: Dict[str, str] = {}
+    
+    def _build_title_cache() -> Dict[str, str]:
         """
-        Walk every JSON file under the Heroic app data root looking for any
-        object that carries { "appName"/"id"/... : gid, "title": "..." }.
-        Uses a fast text prefilter so only files mentioning gid are parsed.
+        One-time scan of all JSON files to build gid -> title mapping.
+        This is much faster than scanning for each game individually.
         """
-        # Go two levels up from hero_conf_root (.../config/heroic) to reach the
-        # flatpak app data root (.../com.heroicgameslauncher.hgl)
+        if _title_cache:  # Already built
+            return _title_cache
+        
         app_root = Path(hero_conf_root).parent.parent
         if not app_root.is_dir():
             app_root = Path(hero_conf_root)
-
+        
+        log(f"Building Heroic title cache from {app_root}...")
+        cache: Dict[str, str] = {}
+        scanned = 0
+        
         for jf in app_root.rglob("*.json"):
             try:
-                txt = jf.read_text(encoding="utf-8", errors="ignore")
+                data = json.loads(jf.read_text(encoding="utf-8", errors="ignore"))
+                scanned += 1
             except Exception:
                 continue
-            if gid not in txt:
-                continue
-            try:
-                data = json.loads(txt)
-            except Exception:
-                continue
-            # Walk every node looking for dicts that identify this gid
+            
+            # Walk every node looking for game entries
             for _, node in _walk_json(data):
                 if not isinstance(node, dict):
                     continue
-                # Check if any ID key matches our gid
-                matched = any(
-                    str(node.get(k) or "") == gid
-                    for k in _TITLE_ID_KEYS
-                    if k in node
-                )
-                if not matched:
-                    continue
-                # Found a matching node — extract best title
-                t = first_valid_title(*(node.get(f) for f in _TITLE_FIELDS))
-                if t:
-                    return t
-        return ""
+                
+                # Extract all possible IDs from this node
+                gids = set()
+                for k in _TITLE_ID_KEYS:
+                    if k in node:
+                        val = str(node.get(k) or "")
+                        if val:
+                            gids.add(val)
+                
+                # Extract best title from this node
+                title = first_valid_title(*(node.get(f) for f in _TITLE_FIELDS))
+                
+                # Store title for all IDs found in this node
+                if title:
+                    for gid in gids:
+                        if gid not in cache:  # Keep first match
+                            cache[gid] = title
+        
+        log(f"Heroic title cache built: {len(cache)} entries from {scanned} JSON files")
+        _title_cache.update(cache)
+        return _title_cache
+
+    def _scan_all_jsons_for_title(gid: str) -> str:
+        """
+        Look up title from the pre-built cache.
+        """
+        cache = _build_title_cache()
+        return cache.get(gid, "")
 
     def resolve_gog_title(it: dict, gid: str, install_path: str, hero_conf_root: str) -> str:
         # 1) direct fields from installed.json entry
@@ -356,69 +375,76 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
 
         return out
 
-    def heroic_find_image_url_for_gid(hero_conf_root: str, gid: str) -> str:
+    # Cache for image URLs to avoid re-scanning JSONs for each game
+    _image_url_cache: Dict[str, str] = {}
+    
+    def _build_image_url_cache() -> Dict[str, str]:
         """
-        Strict mode: only harvest from objects where an ID key equals gid.
-        Fallback: objects that merely *mention* gid.
-        Return best-scoring URL or "".
+        One-time scan to build gid -> image_url mapping.
         """
+        if _image_url_cache:  # Already built
+            return _image_url_cache
+        
         root = Path(hero_conf_root)
         if not root.is_dir():
-            return ""
-
-        # Stage 0: collect JSONs that contain gid (fast prefilter)
-        json_files: list[Path] = []
+            return {}
+        
+        log(f"Building Heroic image URL cache...")
+        cache: Dict[str, str] = {}
+        
+        # Collect all JSON files once
+        all_json_data: list[tuple[Path, Any]] = []
         for jf in root.rglob("*.json"):
             try:
-                txt = jf.read_text(encoding="utf-8", errors="ignore")
-            except Exception:
-                continue
-            if gid in txt:
-                json_files.append(jf)
-
-        if not json_files:
-            return ""
-
-        exact_hits = []
-        fuzzy_hits = []
-
-        for jf in json_files:
-            try:
                 data = json.loads(jf.read_text(encoding="utf-8", errors="ignore"))
+                all_json_data.append((jf, data))
             except Exception:
                 continue
+        
+        # For each potential GID, find image URLs
+        potential_gids = set()
+        for _, data in all_json_data:
             for _, node in _walk_json(data):
-                if isinstance(node, (dict, list)):
-                    if _node_has_exact_gid(node, gid):
+                if isinstance(node, dict):
+                    for k in _ID_KEYS:
+                        if k in node:
+                            gid = str(node.get(k) or "")
+                            if gid:
+                                potential_gids.add(gid)
+        
+        log(f"Found {len(potential_gids)} potential game IDs, extracting image URLs...")
+        
+        # For each GID, find the best image URL
+        for gid in potential_gids:
+            exact_hits = []
+            for _, data in all_json_data:
+                for _, node in _walk_json(data):
+                    if isinstance(node, (dict, list)) and _node_has_exact_gid(node, gid):
                         exact_hits.append(node)
-                    elif _node_mentions_gid(node, gid):
-                        fuzzy_hits.append(node)
-
-        ranked: list[tuple[str,int,int,int,int]] = []
-
-        # Prefer URLs from exact-id nodes
-        for node in exact_hits or []:
-            ranked.extend(_extract_urls_from_node(node))
-
-        # If no exact matches yielded any URL, fall back to fuzzy nodes
-        if not ranked:
-            for node in fuzzy_hits or []:
+            
+            ranked = []
+            for node in exact_hits:
                 ranked.extend(_extract_urls_from_node(node))
+            
+            if ranked:
+                ranked.sort(key=lambda t: (t[1], t[2], t[3], t[4], t[5], -len(t[0])), reverse=True)
+                seen = set()
+                for u, *_ in ranked:
+                    if u not in seen:
+                        cache[gid] = u
+                        seen.add(u)
+                        break
+        
+        log(f"Heroic image URL cache built: {len(cache)} entries")
+        _image_url_cache.update(cache)
+        return _image_url_cache
 
-        if not ranked:
-            return ""
-
-        # Sort: epic_type_rank, cover_key_hit, has_img_ext, prefer_score, -deprio_score, then shorter URLs
-        ranked.sort(key=lambda t: (t[1], t[2], t[3], t[4], t[5], -len(t[0])), reverse=True)
-
-        # Deduplicate while preserving order
-        seen = set()
-        ordered = []
-        for u, *_ in ranked:
-            if u not in seen:
-                seen.add(u)
-                ordered.append(u)
-        return ordered[0] if ordered else ""
+    def heroic_find_image_url_for_gid(hero_conf_root: str, gid: str) -> str:
+        """
+        Look up image URL from the pre-built cache.
+        """
+        cache = _build_image_url_cache()
+        return cache.get(gid, "")
 
     def heroic_cover_png_from_json(hero_conf_root: str, gid: str, images_dir: str) -> str:
         """
@@ -440,6 +466,9 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
         return dst if ok and os.path.isfile(dst) else ""
 
     heroic_apps: List[Dict[str, Any]] = []
+    
+    # Store games needing image downloads
+    games_needing_images: List[Dict[str, Any]] = []
 
     def add_heroic(title, gid, install_path, src, image_path="", source_json=""):
         # Name blacklist by regex
@@ -449,48 +478,33 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                     log(f"Skip {src} {title} ({gid}) [blacklist]")
                     return
 
-        # JSON-only discovery of a cover URL (Epic/GOG)
-        if (not image_path) and src in ("Epic", "GOG"):
-            try:
-                png = heroic_cover_png_from_json(hero_conf_root, str(gid), images_dir)
-                if png:
-                    image_path = png
-            except Exception as e:
-                log(f"Heroic JSON cover lookup failed for {gid}: {e}")
-        
-        # Fallback to SteamGridDB search by name if no image found
-        if not image_path:
-            try:
-                api_key = str(settings.get("SGDB_API_KEY", ""))
-                enable = bool(int(settings.get("SGDB_ENABLE", 1)))
-                timeout = int(settings.get("SGDB_TIMEOUT", 12))
-                if api_key and enable:
-                    # Use game title for search, clean filename for storage
-                    search_name = title or gid
-                    safe_filename = re.sub(r"[^A-Za-z0-9._-]+", "_", f"heroic_{gid}").strip("_") or f"heroic_{gid}"
-                    sgdb_png = sgdb_search_by_name(search_name, images_dir, safe_filename, api_key, enable, timeout)
-                    if sgdb_png:
-                        image_path = sgdb_png
-                        log(f"Downloaded SteamGridDB cover for {search_name}")
-            except Exception as e:
-                log(f"SteamGridDB lookup failed for {title or gid}: {e}")
-
         runner = "sideload" if src == "Sideload" else src.lower()
         base = f"heroic://launch?appName={gid}&runner={runner}"
         if add_silent_param:
             base += "&silent=true"
 
         cmd = f"{heroic_prefix}{base}"
-        heroic_apps.append({
+        
+        # Store game metadata - images will be downloaded later in batch
+        game_entry = {
             "name": f"{title or gid} ({src})",
             "output": "",
             "cmd": cmd,
             "working-dir": install_path or home,
-            "image-path": image_path or "",
+            "image-path": image_path or "",  # May be pre-set (sideload)
             "detached": False,
             "elevated": False,
-            "exit-on-close": True
-        })
+            "exit-on-close": True,
+            "_gid": gid,
+            "_title": title,
+            "_src": src,
+        }
+        
+        # If no image path provided, mark for concurrent download
+        if not image_path:
+            games_needing_images.append(game_entry)
+        
+        heroic_apps.append(game_entry)
         log(f"Found {src}  {yn(title or gid)}")
 
     # --------------------- EPIC (Legendary) ---------------------
@@ -678,5 +692,62 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
             log(f"Failed to parse sideload library: {e}")
     else:
         log(f"No sideload library.json at {sideload_library}")
+
+    # Download all missing images concurrently
+    if games_needing_images:
+        api_key = str(settings.get("SGDB_API_KEY", ""))
+        sgdb_enable = bool(int(settings.get("SGDB_ENABLE", 1)))
+        timeout = int(settings.get("SGDB_TIMEOUT", 6))  # Reduced default timeout
+        
+        downloader = ImageDownloader(max_workers=10)
+        download_tasks = {}
+        
+        for game in games_needing_images:
+            gid = game["_gid"]
+            title = game["_title"]
+            src = game["_src"]
+            
+            # Create download function for this game
+            def make_download_func(g_id, g_title, g_src):
+                def download():
+                    # Try JSON-only discovery first (Epic/GOG)
+                    if g_src in ("Epic", "GOG"):
+                        try:
+                            png = heroic_cover_png_from_json(hero_conf_root, str(g_id), images_dir)
+                            if png:
+                                return png
+                        except Exception:
+                            pass
+                    
+                    # Fallback to SteamGridDB
+                    if api_key and sgdb_enable:
+                        try:
+                            search_name = g_title or g_id
+                            safe_filename = re.sub(r"[^A-Za-z0-9._-]+", "_", f"heroic_{g_id}").strip("_") or f"heroic_{g_id}"
+                            sgdb_png = sgdb_search_by_name(search_name, images_dir, safe_filename, api_key, sgdb_enable, timeout)
+                            if sgdb_png:
+                                return sgdb_png
+                        except Exception:
+                            pass
+                    return None
+                return download
+            
+            download_tasks[str(gid)] = make_download_func(gid, title, src)
+        
+        # Download all images concurrently
+        image_results = downloader.download_batch(download_tasks, desc="Heroic")
+        
+        # Update apps with downloaded images
+        for game in games_needing_images:
+            gid = game["_gid"]
+            image_path = image_results.get(str(gid), "")
+            if image_path:
+                game["image-path"] = image_path
+    
+    # Clean up temporary fields
+    for app in heroic_apps:
+        app.pop("_gid", None)
+        app.pop("_title", None)
+        app.pop("_src", None)
 
     return heroic_apps

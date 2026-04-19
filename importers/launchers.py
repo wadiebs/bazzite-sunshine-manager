@@ -36,7 +36,7 @@ def _to_raw_github(url: str) -> str:
         return raw
     return url
 
-def _download_image(src_url: str, dst_path: str, timeout: int = 20) -> bool:
+def _download_image(src_url: str, dst_path: str, timeout: int = 8) -> bool:  # Reduced from 20 to 8 seconds
     url = _to_raw_github(src_url)
     try:
         os.makedirs(os.path.dirname(dst_path), exist_ok=True)

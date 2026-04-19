@@ -160,6 +160,51 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
             log(f"Warn: scan GamesConfig failed: {e}")
         return ""
 
+    # _ID_KEYS used to match appName/id fields in any JSON object
+    _TITLE_ID_KEYS = {"appName", "app_name", "appname", "app_id", "appId", "id", "productId", "productID"}
+    _TITLE_FIELDS  = ("title", "appTitle", "gameTitle", "name", "displayName")
+
+    def _scan_all_jsons_for_title(gid: str) -> str:
+        """
+        Walk every JSON file under the Heroic app data root looking for any
+        object that carries { "appName"/"id"/... : gid, "title": "..." }.
+        Uses a fast text prefilter so only files mentioning gid are parsed.
+        """
+        # Go two levels up from hero_conf_root (.../config/heroic) to reach the
+        # flatpak app data root (.../com.heroicgameslauncher.hgl)
+        app_root = Path(hero_conf_root).parent.parent
+        if not app_root.is_dir():
+            app_root = Path(hero_conf_root)
+
+        for jf in app_root.rglob("*.json"):
+            try:
+                txt = jf.read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                continue
+            if gid not in txt:
+                continue
+            try:
+                data = json.loads(txt)
+            except Exception:
+                continue
+            # Walk every node looking for dicts that identify this gid
+            for _, node in _walk_json(data):
+                if not isinstance(node, dict):
+                    continue
+                # Check if any ID key matches our gid
+                matched = any(
+                    str(node.get(k) or "") == gid
+                    for k in _TITLE_ID_KEYS
+                    if k in node
+                )
+                if not matched:
+                    continue
+                # Found a matching node — extract best title
+                t = first_valid_title(*(node.get(f) for f in _TITLE_FIELDS))
+                if t:
+                    return t
+        return ""
+
     def resolve_gog_title(it: dict, gid: str, install_path: str, hero_conf_root: str) -> str:
         # 1) direct fields from installed.json entry
         t = first_valid_title(it.get("title"), it.get("gameTitle"), it.get("appTitle"))
@@ -190,78 +235,18 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
         if t:
             return t
 
-        # 4) store/config.json → games.recent (contains appName + title for all Heroic games)
-        store_cfg = load_json_if(os.path.join(hero_conf_root, "store", "config.json"))
-        if store_cfg:
-            recent = (store_cfg.get("games") or {}).get("recent") or []
-            if isinstance(recent, list):
-                for entry in recent:
-                    if isinstance(entry, dict) and str(entry.get("appName") or "") == str(gid):
-                        t = first_valid_title(entry.get("title"))
-                        if t:
-                            return t
+        # 4) Broad scan — all JSON files under the Heroic app data root
+        t = _scan_all_jsons_for_title(gid)
+        if t:
+            return t
 
-        # 5) gog_store/library.json (match by id or installPath)
-        lib_json = load_json_if(os.path.join(hero_conf_root, "gog_store", "library.json"))
-        if lib_json:
-            candidates = []
-            if isinstance(lib_json, dict):
-                # Some Heroic versions key library entries by gid directly.
-                if str(gid) in lib_json and isinstance(lib_json.get(str(gid)), dict):
-                    o = lib_json.get(str(gid), {})
-                    t = first_valid_title(
-                        o.get("title"),
-                        (o.get("game") or {}).get("title") if isinstance(o.get("game"), dict) else "",
-                        o.get("gameTitle"),
-                        o.get("appTitle")
-                    )
-                    if t:
-                        return t
-                for key in ("library", "games", "items"):
-                    if isinstance(lib_json.get(key), list):
-                        candidates.extend(lib_json[key])
-                if not candidates and all(isinstance(v, dict) for v in lib_json.values()):
-                    candidates.extend(lib_json.values())
-            elif isinstance(lib_json, list):
-                candidates = lib_json
-
-            def id_of(o):
-                return first_non_empty(str(o.get("appName") or ""), str(o.get("app_name") or ""), str(o.get("id") or ""))
-
-            for o in candidates:
-                if not isinstance(o, dict):
-                    continue
-                ipath = str(o.get("installPath") or o.get("install_path") or "")
-                if id_of(o) == str(gid) or (install_path and ipath and os.path.normpath(ipath) == os.path.normpath(install_path)):
-                    t = first_valid_title(
-                        o.get("title"),
-                        (o.get("game") or {}).get("title") if isinstance(o.get("game"), dict) else "",
-                        o.get("gameTitle"),
-                        o.get("appTitle")
-                    )
-                    if t:
-                        return t
-                    # Don't break — no valid title in this match; keep scanning in case
-                    # another entry resolves the same game via installPath.
-
-        # 6) per-game details caches
-        for sub in ("gamedetails", "details"):
-            details_path = os.path.join(hero_conf_root, "gog_store", sub, f"{gid}.json")
-            det = load_json_if(details_path)
-            t = first_valid_title(
-                det.get("title"),
-                (det.get("game") or {}).get("title") if isinstance(det.get("game"), dict) else ""
-            )
-            if t:
-                return t
-
-        # 7) Install folder name → title (only if not a generic placeholder)
+        # 5) Install folder name → title (only if not a generic placeholder)
         if install_path:
             folder = os.path.basename(os.path.normpath(install_path))
             if is_valid_game_title(folder):
                 return humanize_slug(folder)
 
-        # 8) slug → human
+        # 6) slug → human
         slug = first_non_empty(it.get("slug"), it.get("appName"), it.get("app_name"))
         if slug and not str(slug).isdigit():
             return humanize_slug(str(slug))

@@ -71,6 +71,12 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
     games_cfg_dir       = os.path.join(hero_conf_root, "GamesConfig")
     sideload_library    = os.path.join(hero_conf_root, "sideload_apps", "library.json")
 
+    # ---------------------- Cache variables (module-level within function scope) ----------------------
+    # These need to be declared before the helper functions that use them
+    _title_cache: Dict[str, str] = {}
+    _image_url_cache: Dict[str, str] = {}
+    _caches_built = False
+
     # ---------------------- helpers for Heroic/GOG ----------------------
     INVALID_TITLES = {
         "heroic", "default", "title", "unknown", "game", "gog"
@@ -158,11 +164,6 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                     if t:
                         return t
         except Exception as e:
-            log(f"Warn: scan GamesConfig failed: {e}")
-        return ""
-
-    # _ID_KEYS used to match appName/id fields in any JSON object
-    _TITLE_ID_KEYS = {"appName", "app_name", "appname", "app_id", "appId", "id", "productId", "productID"}
     _TITLE_FIELDS  = ("title", "appTitle", "gameTitle", "name", "displayName")
 
     # Build global caches by scanning all JSONs once (memoized)
@@ -175,7 +176,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
         One-time scan of all JSON files to build both gid->title and gid->image_url mappings.
         Much faster than separate scans for each cache.
         """
-        global _caches_built
+        nonlocal _caches_built, _title_cache, _image_url_cache
         if _caches_built:
             return _title_cache, _image_url_cache
         

@@ -467,9 +467,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
             try:
                 raw = read_json(legendary_installed, {})
                 for gid, val in (raw or {}).items():
-                    install_path = _existing_path((val or {}).get("install_path"))
-                    if not install_path:
-                        continue
+                    install_path = str((val or {}).get("install_path") or "")
                     title = (val or {}).get("title") or (val or {}).get("app_title") or gid
                     add_heroic(title, gid, install_path, "Epic")
             except Exception as e:
@@ -542,7 +540,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                         or game_data.get("installPath", "")
                         or game_data.get("install_path", "")
                     )
-                    install_path = _existing_path(raw_install_path) or str(raw_install_path or "")
+                    install_path = str(raw_install_path or "")
                     
                     add_heroic(title, gid, install_path, "GOG", source_json=cfg_path)
         else:
@@ -552,7 +550,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                     continue
                 install_path = str(it.get("installPath") or it.get("install_path") or "")
                 title = resolve_gog_title(it, str(gid), install_path, hero_conf_root)
-                add_heroic(title, str(gid), _existing_path(install_path) or install_path, "GOG", source_json=gog_installed)
+                add_heroic(title, str(gid), install_path, "GOG", source_json=gog_installed)
 
     # --------------------- SIDELOAD ---------------------
     if os.path.isfile(sideload_library):

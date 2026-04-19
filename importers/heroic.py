@@ -164,6 +164,11 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                     if t:
                         return t
         except Exception as e:
+            log(f"Warn: scan GamesConfig failed: {e}")
+        return ""
+
+    # _ID_KEYS used to match appName/id fields in any JSON object
+    _TITLE_ID_KEYS = {"appName", "app_name", "appname", "app_id", "appId", "id", "productId", "productID"}
     _TITLE_FIELDS  = ("title", "appTitle", "gameTitle", "name", "displayName")
 
     # Build global caches by scanning all JSONs once (memoized)

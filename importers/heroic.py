@@ -81,7 +81,15 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
         s = v.strip()
         if not s:
             return False
-        return s.lower() not in INVALID_TITLES
+        sl = s.lower()
+        if sl in INVALID_TITLES:
+            return False
+        # Reject pure numeric ids and "gog <id>" placeholders.
+        if s.isdigit():
+            return False
+        if re.fullmatch(r"gog\s+\d+", sl):
+            return False
+        return True
 
     def first_non_empty(*vals) -> str:
         for v in vals:
@@ -179,6 +187,17 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
         if lib_json:
             candidates = []
             if isinstance(lib_json, dict):
+                # Some Heroic versions key library entries by gid directly.
+                if str(gid) in lib_json and isinstance(lib_json.get(str(gid)), dict):
+                    o = lib_json.get(str(gid), {})
+                    t = first_non_empty(
+                        o.get("title"),
+                        (o.get("game") or {}).get("title") if isinstance(o.get("game"), dict) else "",
+                        o.get("gameTitle"),
+                        o.get("appTitle")
+                    )
+                    if t:
+                        return t
                 for key in ("library", "games", "items"):
                     if isinstance(lib_json.get(key), list):
                         candidates.extend(lib_json[key])

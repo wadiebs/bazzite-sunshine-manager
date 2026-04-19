@@ -467,9 +467,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
             try:
                 raw = read_json(legendary_installed, {})
                 for gid, val in (raw or {}).items():
-                    install_path = _existing_path((val or {}).get("install_path"))
-                    if not install_path:
-                        continue
+                    install_path = str((val or {}).get("install_path") or "")
                     title = (val or {}).get("title") or (val or {}).get("app_title") or gid
                     add_heroic(title, gid, install_path, "Epic")
             except Exception as e:
@@ -490,7 +488,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                     continue
                 gid = it.get("appName") or it.get("app_name") or it.get("id")
                 if gid:
-                    installed_gog[str(gid)] = _existing_path(it.get("installPath") or it.get("install_path") or "")
+                    installed_gog[str(gid)] = it
         
         if not installed_gog:
             log("No installed GOG games found in gog_store/installed.json")
@@ -516,9 +514,9 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                     if not isinstance(game_data, dict):
                         continue
                     
-                    # Only process GOG games (check runner field)
+                    # Prefer GOG runners, but do not reject entries with missing runner metadata.
                     runner = str(game_data.get("runner", "")).lower()
-                    if runner != "gog":
+                    if runner and runner not in ("gog", "gogdl"):
                         continue
 
                     seen_gog_ids.add(gid)
@@ -534,18 +532,25 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                     else:
                         title = gid
                     
-                    # Use installPath from game_data if available
-                    install_path = _existing_path(
-                        installed_gog.get(gid)
+                    # Resolve a working dir from installed metadata first; if path does not exist
+                    # on this machine, still keep the entry since installed.json is authoritative.
+                    installed_meta = installed_gog.get(gid, {})
+                    raw_install_path = (
+                        str(installed_meta.get("installPath") or installed_meta.get("install_path") or "")
                         or game_data.get("installPath", "")
                         or game_data.get("install_path", "")
                     )
-                    if not install_path:
-                        continue
+                    install_path = str(raw_install_path or "")
                     
                     add_heroic(title, gid, install_path, "GOG", source_json=cfg_path)
         else:
-            log(f"No Heroic GamesConfig at {games_cfg_dir}")
+            # Fallback: import from installed.json when GamesConfig is unavailable.
+            for gid, it in installed_gog.items():
+                if not isinstance(it, dict):
+                    continue
+                install_path = str(it.get("installPath") or it.get("install_path") or "")
+                title = resolve_gog_title(it, str(gid), install_path, hero_conf_root)
+                add_heroic(title, str(gid), install_path, "GOG", source_json=gog_installed)
 
     # --------------------- SIDELOAD ---------------------
     if os.path.isfile(sideload_library):

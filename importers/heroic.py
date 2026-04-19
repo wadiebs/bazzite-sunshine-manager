@@ -482,7 +482,21 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
         installed_gog = {}
         if os.path.isfile(gog_installed):
             data = read_json(gog_installed, {})
-            items = data.get("installed", data if isinstance(data, list) else [])
+            if isinstance(data, dict) and isinstance(data.get("installed"), list):
+                items = data.get("installed", [])
+            elif isinstance(data, list):
+                items = data
+            elif isinstance(data, dict):
+                # Some Heroic versions store installed.json as a map: { "<gid>": { ... } }
+                items = []
+                for k, v in data.items():
+                    if not isinstance(v, dict):
+                        continue
+                    it = dict(v)
+                    it.setdefault("id", str(k))
+                    items.append(it)
+            else:
+                items = []
             for it in items:
                 if not isinstance(it, dict):
                     continue
@@ -513,11 +527,6 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                     game_data = cfg.get(gid)
                     if not isinstance(game_data, dict):
                         continue
-                    
-                    # Prefer GOG runners, but do not reject entries with missing runner metadata.
-                    runner = str(game_data.get("runner", "")).lower()
-                    if runner and runner not in ("gog", "gogdl"):
-                        continue
 
                     seen_gog_ids.add(gid)
                     
@@ -543,6 +552,16 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                     install_path = str(raw_install_path or "")
                     
                     add_heroic(title, gid, install_path, "GOG", source_json=cfg_path)
+
+            # Fallback: some installed GOG IDs may not exist in GamesConfig yet.
+            for gid, it in installed_gog.items():
+                if gid in seen_gog_ids:
+                    continue
+                if not isinstance(it, dict):
+                    continue
+                install_path = str(it.get("installPath") or it.get("install_path") or "")
+                title = resolve_gog_title(it, str(gid), install_path, hero_conf_root)
+                add_heroic(title, str(gid), install_path, "GOG", source_json=gog_installed)
         else:
             # Fallback: import from installed.json when GamesConfig is unavailable.
             for gid, it in installed_gog.items():

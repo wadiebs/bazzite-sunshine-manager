@@ -468,8 +468,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
             "elevated": False,
             "exit-on-close": True
         })
-        src_hint = f" [{os.path.basename(str(source_json))}]" if source_json else ""
-        log(f"Found {src}{src_hint}  {yn(title or gid)}")
+        log(f"Found {src}  {yn(title or gid)}")
 
     # --------------------- EPIC (Legendary) ---------------------
     if "epic" in include_sources:

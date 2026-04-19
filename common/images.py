@@ -30,7 +30,7 @@ def download_temp(url_or_path: str, suffix: str = "") -> str:
             fd, tmp = tempfile.mkstemp(prefix="sg_", suffix=suffix or ext)
             os.close(fd)
             req = urllib.request.Request(url_or_path, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=20) as resp:
+            with urllib.request.urlopen(req, timeout=8) as resp:  # Reduced from 20 to 8 seconds
                 with open(tmp, "wb") as f:
                     f.write(resp.read())
             return tmp
@@ -99,17 +99,16 @@ def stretch_png_600x900(src_path: str, dst_png: str) -> bool:
 def steam_cdn_to_png(appid: int, images_dir: str, timeout: int = 12) -> str:
     out = os.path.join(images_dir, f"{appid}.png")
     
-    # If valid image already exists, return it
+    # Quick validation: if file exists with reasonable size, assume it's valid
+    # This avoids opening every image with PIL on every run
     if os.path.isfile(out):
         try:
-            # Quick validation - check file size and try to open as image
-            if os.path.getsize(out) > 1000:  # Reasonable minimum size
-                from PIL import Image
-                with Image.open(out) as img:
-                    if img.size == (600, 900) and img.format == 'PNG':
-                        return out
+            size = os.path.getsize(out)
+            # Valid images should be at least 10KB, typically 50-500KB
+            if size > 10000:
+                return out
         except Exception:
-            pass  # File exists but is invalid, continue with download
+            pass
     
     # Download and create new image
     url = f"https://steamcdn-a.akamaihd.net/steam/apps/{appid}/library_600x900.jpg"
@@ -131,17 +130,14 @@ def steam_sgdb_to_png(appid: int, images_dir: str, api_key: str, enable: bool, t
     
     out = os.path.join(images_dir, f"{appid}.png")
     
-    # If valid image already exists, return it
+    # Quick validation: if file exists with reasonable size, assume it's valid
     if os.path.isfile(out):
         try:
-            # Quick validation - check file size and try to open as image
-            if os.path.getsize(out) > 1000:  # Reasonable minimum size
-                from PIL import Image
-                with Image.open(out) as img:
-                    if img.size == (600, 900) and img.format == 'PNG':
-                        return out
+            size = os.path.getsize(out)
+            if size > 10000:
+                return out
         except Exception:
-            pass  # File exists but is invalid, continue with download
+            pass
     
     # Download from SteamGridDB
     try:

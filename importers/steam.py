@@ -2,6 +2,7 @@ import os, re, glob, json, pathlib
 from typing import List, Dict, Any
 from common.utils import log, yn, read_json
 from common.images import steam_cdn_to_png, steam_sgdb_to_png
+from common.image_downloader import ImageDownloader
 
 def import_steam(home: str, conf_dir: str, images_dir: str, settings: Dict[str, Any]) -> List[Dict[str, Any]]:
     IMPORT_STEAM = settings.get("IMPORT_STEAM", True)
@@ -66,8 +67,9 @@ def import_steam(home: str, conf_dir: str, images_dir: str, settings: Dict[str, 
                 if pat.lower() in name.lower(): return True
         return False
 
-    apps=[]
-    app_count=0
+    # First pass: collect all game metadata without downloading images
+    game_metadata = []
+    app_count = 0
     for sd in lib_dirs:
         for path in glob.glob(os.path.join(sd,"appmanifest_*.acf")):
             try: txt=open(path,"r",encoding="utf-8",errors="ignore").read()
@@ -92,16 +94,53 @@ def import_steam(home: str, conf_dir: str, images_dir: str, settings: Dict[str, 
             else:
                 cmd=f'steam -applaunch {appid}'
                 workdir=steam_root
-
-            image_path = (steam_cdn_to_png(appid, images_dir, timeout=int(settings.get("SGDB_TIMEOUT", 12))) or
-                          steam_sgdb_to_png(appid, images_dir, api_key=str(settings.get("SGDB_API_KEY", "")),
-                                            enable=bool(int(settings.get("SGDB_ENABLE", 1))),
-                                            timeout=int(settings.get("SGDB_TIMEOUT", 12))))
-
-            apps.append({
-                "name": name, "output": "", "cmd": cmd, "working-dir": workdir,
-                "image-path": image_path or "", "detached": False, "elevated": False, "exit-on-close": True
+            
+            game_metadata.append({
+                "appid": appid,
+                "name": name,
+                "cmd": cmd,
+                "workdir": workdir
             })
             log(f"Found Steam  [{appid}] {yn(name)}")
+    
     log(f"Steam installed scanned: {app_count}")
+    
+    # Second pass: download all images concurrently
+    timeout = int(settings.get("SGDB_TIMEOUT", 6))  # Reduced default timeout
+    api_key = str(settings.get("SGDB_API_KEY", ""))
+    sgdb_enable = bool(int(settings.get("SGDB_ENABLE", 1)))
+    
+    downloader = ImageDownloader(max_workers=10)
+    download_tasks = {}
+    
+    for game in game_metadata:
+        appid = game["appid"]
+        # Create download function for this game
+        def make_download_func(aid):
+            def download():
+                return (steam_cdn_to_png(aid, images_dir, timeout=timeout) or
+                        steam_sgdb_to_png(aid, images_dir, api_key=api_key,
+                                        enable=sgdb_enable, timeout=timeout))
+            return download
+        download_tasks[str(appid)] = make_download_func(appid)
+    
+    # Download all images concurrently
+    image_results = downloader.download_batch(download_tasks, desc="Steam")
+    
+    # Third pass: assemble final app entries with downloaded images
+    apps = []
+    for game in game_metadata:
+        appid = game["appid"]
+        image_path = image_results.get(str(appid), "")
+        apps.append({
+            "name": game["name"], 
+            "output": "", 
+            "cmd": game["cmd"], 
+            "working-dir": game["workdir"],
+            "image-path": image_path or "", 
+            "detached": False, 
+            "elevated": False, 
+            "exit-on-close": True
+        })
+    
     return apps

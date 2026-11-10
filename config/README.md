@@ -1,4 +1,9 @@
 ## Common toggles
+- SUNSHINE_USERNAME="your Sunshine Web UI username"
+- SUNSHINE_PASSWORD="your Sunshine Web UI password" (or enter at the hidden prompt)
+- SUNSHINE_PORT=47990
+- SUNSHINE_VERIFY_TLS=0
+- SUNSHINE_CONF_DIR="/path/to/sunshine" (local artwork directory)
 - IMPORT_STEAM=1
 - IMPORT_HEROIC=1
 - INCLUDE_SYSTEM_APPS=1
@@ -12,4 +17,3 @@
 - INCLUDE_SOURCES="epic,gog,amazon"
 - SYSTEM_APPS_JSON="/usr/share/sunshine/apps.json"
 - FORCE_COLOR=0
-

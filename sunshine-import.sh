@@ -11,6 +11,10 @@
 #   --restart                      Restart Sunshine after import (systemctl --user restart sunshine.service)
 #   --python PY                    Python interpreter to use (default: python3)
 #   --conf-dir DIR                 Force Sunshine config dir (sets SUNSHINE_CONF_DIR for your script to read)
+#   --sunshine-user USER           Sunshine Web UI username (or SUNSHINE_USERNAME)
+#   --sunshine-port PORT           Local HTTPS API port (default: 47990)
+#   --verify-tls                   Verify Sunshine's TLS certificate
+#   Password: SUNSHINE_PASSWORD environment variable, or a hidden interactive prompt
 #   --sgdb-key "YOUR_STEAMGRID_API" Enable SteamGrid to download game covers (IMPORT_HEROIC=1/0)
 #   -h, --help                     Show help
 #
@@ -88,10 +92,10 @@ echo "[sunshine-import] IMPORT_STEAM=$IMPORT_STEAM IMPORT_HEROIC=$IMPORT_HEROIC 
 if [[ -n "${SUNSHINE_CONF_DIR:-}" ]]; then
   echo "[sunshine-import] SUNSHINE_CONF_DIR=$SUNSHINE_CONF_DIR" >&2
 fi
-echo "[sunshine-import] Running: $PYTHON \"$PY_SCRIPT\" ${ARGS_TO_PY[*]:-}" >&2
+echo "[sunshine-import] Running: $PYTHON \"$PY_SCRIPT\"" >&2
 
 set +e
-"$PYTHON" "$PY_SCRIPT" "${ARGS_TO_PY[@]:-}"
+"$PYTHON" "$PY_SCRIPT" "${ARGS_TO_PY[@]}"
 RET=$?
 set -e
 

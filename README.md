@@ -1,7 +1,7 @@
 # Bazzite Sunshine Manager
 
 A lightweight tool to import Steam, Heroic (Epic/GOG/Amazon), and Lutris games into [Sunshine](https://github.com/LizardByte/Sunshine).  
-It scans local libraries, applies blacklists, fetches cover art (Steam CDN or SteamGridDB), and safely merges everything into Sunshine’s `apps.json`.
+It scans local libraries, applies blacklists, fetches cover art (Steam CDN or SteamGridDB), and creates or updates applications through Sunshine's localhost HTTPS API.
 
 this tool is optimized to run under [Bazzite](https://github.com/ublue-os/bazzite).
 
@@ -33,9 +33,31 @@ To run the import of games to sunshine process:
 sunshine-import
 ```
 
+Enter your Sunshine Web UI username and password when prompted. For unattended runs,
+set `SUNSHINE_USERNAME` and `SUNSHINE_PASSWORD` in the process environment.
+Credentials are not saved by the importer. You can also provide the username with
+`--sunshine-user USER`.
+
+The API must already be running at `https://localhost:47990`. Use
+`--sunshine-port PORT` (or `SUNSHINE_PORT`) for a different local port.
+Sunshine's self-signed certificate is accepted by default on this localhost-only
+connection; `--verify-tls` or `SUNSHINE_VERIFY_TLS=1` enables certificate validation
+using the system trust store.
+
+Applications are matched by exact name: existing matches are updated and new names
+are created. Other entries, including games now blacklisted or uninstalled, remain
+untouched. Duplicate existing names stop the import with an error. Saves take effect
+immediately, so `--restart` is optional. If a save fails, the command exits nonzero
+and reports how many applications were saved; earlier saves remain applied.
+
+The importer no longer reads, backs up, or writes `apps.json`, or changes Sunshine's
+global environment (`ENV_PATH_APPEND` is no longer used). Ensure launch commands
+are available in Sunshine's existing `PATH`. Cover images are still stored locally;
+`--conf-dir` selects their Sunshine directory and must be accessible to Sunshine.
+The API contract follows [Sunshine's Web UI handlers](https://github.com/LizardByte/Sunshine/blob/master/src/confighttp.cpp).
+
 To run it with steamgrid enabled and restart sunshine service after import:
 ```bash
 sunshine-import --sgdb-key "YOUR_STEAMGRID_API" --restart
 ```
-
 

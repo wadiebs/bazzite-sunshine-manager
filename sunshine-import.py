@@ -8,13 +8,11 @@ Version: 2.0
 
 Description:
 Automated importer and manager for Sunshine streaming app configurations.
-This tool recreates Sunshine's apps.json with proper structure and organization.
+This tool creates and updates Sunshine applications through its localhost API.
 
 Features:
 - Automatic detection of Sunshine configuration directory (Flatpak + native)
 - Imports applications from multiple sources (Steam, Heroic Launcher, custom launchers)
-- Maintains proper JSON structure with "env" section first, followed by "apps"
-- Comprehensive environment variable and application mapping
 - Blacklist support for filtering unwanted applications
 - Modular architecture for easy extension of import sources
 - Support for poster/thumbnail artwork organization
@@ -22,14 +20,15 @@ Features:
 
 import sys
 import os
-import shutil
+import argparse
+import getpass
 import subprocess
-import pathlib
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 # Safe to import local modules now
-from common.utils import log, write_json  # noqa: E402
+from common.utils import log  # noqa: E402
+from common.sunshine_api import SunshineAPI, SunshineAPIError
 from importers.steam import import_steam  # noqa: E402
 from importers.heroic import import_heroic  # noqa: E402
 from importers.launchers import import_launchers
@@ -106,12 +105,32 @@ def getenv_flag(name: str, default: bool) -> bool:
 
 
 def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(description="Import applications using the localhost Sunshine API.")
+    parser.add_argument("--sunshine-user", default=os.getenv("SUNSHINE_USERNAME"))
+    parser.add_argument("--sunshine-port", type=int, default=os.getenv("SUNSHINE_PORT", "47990"))
+    parser.add_argument("--verify-tls", action="store_true", default=getenv_flag("SUNSHINE_VERIFY_TLS", False))
+    args = parser.parse_args(argv[1:])
+    username = args.sunshine_user
+    password = os.getenv("SUNSHINE_PASSWORD")
+    if sys.stdin.isatty():
+        try:
+            username = username or input("Sunshine username: ")
+            password = password or getpass.getpass("Sunshine password: ")
+        except (EOFError, KeyboardInterrupt):
+            log("Authentication cancelled.")
+            return 1
+    try:
+        api = SunshineAPI(username, password, args.sunshine_port, args.verify_tls)
+        api.list_apps()
+    except SunshineAPIError as exc:
+        log(str(exc))
+        return 1
+
     home = str(Path.home())
     conf_dir = detect_sunshine_config_dir(home)
     os.makedirs(conf_dir, exist_ok=True)
 
     # Paths
-    apps_json = os.path.join(conf_dir, "apps.json")
     images_root = os.path.join(conf_dir, "images")
     images_dir_steam = os.path.join(images_root, "steam")
     images_dir_heroic = os.path.join(images_root, "heroic")
@@ -121,14 +140,6 @@ def main(argv: list[str]) -> int:
 
     log(f"Sunshine config: {conf_dir}")
     log(f"Images root:     {images_root}")
-
-    # Fresh file each run: keep a backup for troubleshooting
-    if os.path.exists(apps_json):
-        try:
-            shutil.copy2(apps_json, f"{apps_json}.bak")
-            log(f"Backup saved: {apps_json}.bak")
-        except Exception as e:
-            log(f"Warning: failed to backup apps.json: {e}")
 
     # Read toggles from environment
     IMPORT_STEAM = getenv_flag("IMPORT_STEAM", True)
@@ -155,23 +166,16 @@ def main(argv: list[str]) -> int:
 
     apps += import_launchers(home, conf_dir, os.path.join(conf_dir, "images", "launchers"), settings)
 
-    # --- ENV BLOCK FIRST ---
-    # Default PATH augmentation as requested; allow optional extra append via ENV_PATH_APPEND.
-    env_block = {
-        "PATH": "$(PATH):$(HOME)/.local/bin" + ((":" + os.getenv("ENV_PATH_APPEND")) if os.getenv("ENV_PATH_APPEND") else "")
-    }
-
-    # Fresh write: "env" then "apps" (then meta for visibility)
-    payload = {
-        "env": env_block,
-        "apps": apps,
-        "meta": {
-            "generated-by": "bazzite-sunshine-manager",
-            "enabled-importers": enabled_importers,
-        },
-    }
-    write_json(apps_json, payload)
-    log(f"Wrote {len(apps)} apps. Enabled importers: {', '.join(enabled_importers) or 'none'}")
+    saved = 0
+    try:
+        for app in apps:
+            action = api.upsert_app(app)
+            saved += 1
+            log(f"{action}: {app['name']}")
+    except SunshineAPIError as exc:
+        log(f"Import stopped after {saved}/{len(apps)} saves: {exc}")
+        return 1
+    log(f"Saved {saved} apps through the Sunshine API.")
 
     return 0
 

@@ -111,11 +111,16 @@ def steam_local_to_png(appid: int, images_dir: str, steam_root: str = "") -> str
     if not steam_root:
         return ""
 
+    cache = os.path.join(steam_root, "appcache", "librarycache")
     candidates = [
-        os.path.join(steam_root, "appcache", "librarycache", f"{appid}_library_600x900.jpg"),
-        os.path.join(steam_root, "appcache", "librarycache", f"{appid}_library_600x900.png"),
-        os.path.join(steam_root, "appcache", "librarycache", f"{appid}_library_600x900_2x.jpg"),
-        os.path.join(steam_root, "appcache", "librarycache", f"{appid}_library_600x900_2x.png"),
+        os.path.join(cache, f"{appid}_library_600x900.jpg"),
+        os.path.join(cache, f"{appid}_library_600x900.png"),
+        os.path.join(cache, f"{appid}_library_600x900_2x.jpg"),
+        os.path.join(cache, f"{appid}_library_600x900_2x.png"),
+        # Newer Steam clients store art in a per-app folder
+        os.path.join(cache, str(appid), "library_600x900.jpg"),
+        os.path.join(cache, str(appid), "library_600x900.png"),
+        os.path.join(cache, str(appid), "library_600x900_2x.jpg"),
     ]
 
     for src in candidates:

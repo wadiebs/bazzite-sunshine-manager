@@ -23,9 +23,10 @@ Features:
 import sys
 import os
 import shutil
+import subprocess
 import pathlib
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 
 # Safe to import local modules now
 from common.utils import log, write_json  # noqa: E402
@@ -33,14 +34,68 @@ from importers.steam import import_steam  # noqa: E402
 from importers.heroic import import_heroic  # noqa: E402
 from importers.launchers import import_launchers
 
+FLATPAK_IDS = ["dev.lizardbyte.app.Sunshine", "dev.lizardbyte.Sunshine"]
+NATIVE_SERVICES = ["sunshine-kms.service", "sunshine.service"]
+
+
+def _run_ok(cmd: List[str]) -> Optional[subprocess.CompletedProcess]:
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def _native_config_dir(home: str) -> str:
+    base = os.getenv("XDG_CONFIG_HOME") or os.path.join(home, ".config")
+    return os.path.join(base, "sunshine")
+
+
+def _flatpak_config_dir(home: str, app_id: str) -> str:
+    return os.path.join(home, ".var", "app", app_id, "config", "sunshine")
+
+
+def _running_flatpak_id() -> Optional[str]:
+    res = _run_ok(["flatpak", "ps", "--columns=application"])
+    if res is None or res.returncode != 0:
+        return None
+    running = {line.strip() for line in res.stdout.splitlines()}
+    return next((fid for fid in FLATPAK_IDS if fid in running), None)
+
+
+def _native_running() -> bool:
+    for unit in NATIVE_SERVICES:
+        res = _run_ok(["systemctl", "--user", "is-active", "--quiet", unit])
+        if res is not None and res.returncode == 0:
+            return True
+    res = _run_ok(["pgrep", "-x", "sunshine"])
+    return res is not None and res.returncode == 0
+
+
 def detect_sunshine_config_dir(home: str) -> str:
-    """Detect Sunshine config directory (Flatpak + native)."""
-    flatpak_ids = ["dev.lizardbyte.app.Sunshine", "dev.lizardbyte.Sunshine"]
-    for fid in flatpak_ids:
-        fp_dir = os.path.join(home, ".var", "app", fid, "config", "sunshine")
-        if os.path.isdir(fp_dir):
-            return fp_dir
-    return os.path.join(home, ".config", "sunshine")
+    """Pick the config dir of the Sunshine instance in use (override > running instance > newest apps.json)."""
+    override = os.getenv("SUNSHINE_CONF_DIR")
+    if override:
+        log(f"Config dir from SUNSHINE_CONF_DIR: {override}")
+        return override
+
+    fid = _running_flatpak_id()
+    if fid:
+        log(f"Detected running Flatpak Sunshine ({fid})")
+        return _flatpak_config_dir(home, fid)
+
+    native = _native_config_dir(home)
+    if _native_running():
+        log("Detected running native Sunshine")
+        return native
+
+    # Sunshine not running: prefer the config that was used most recently.
+    candidates = [native] + [_flatpak_config_dir(home, f) for f in FLATPAK_IDS]
+    existing = [d for d in candidates if os.path.isfile(os.path.join(d, "apps.json"))]
+    if existing:
+        chosen = max(existing, key=lambda d: os.path.getmtime(os.path.join(d, "apps.json")))
+        log(f"Sunshine not running; using most recently modified config: {chosen}")
+        return chosen
+    return native
 
 
 def getenv_flag(name: str, default: bool) -> bool:

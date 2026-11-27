@@ -146,10 +146,10 @@ def import_steam(home: str, conf_dir: str, images_dir: str, settings: Dict[str, 
         apps.append({
             "name": game["name"], 
             "output": "", 
-            "cmd": game["cmd"], 
+            "cmd": "",
             "working-dir": game["workdir"],
             "image-path": image_path or "", 
-            "detached": False, 
+            "detached": [game["cmd"]],
             "elevated": False, 
             "exit-on-close": True
         })

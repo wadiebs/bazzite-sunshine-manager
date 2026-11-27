@@ -138,10 +138,10 @@ def import_launchers(home: str, conf_dir: str, images_dir: str, settings: Dict[s
     if steam_cmd:
         apps.append({
             "name": NAMES["steam"],
-            "cmd": steam_cmd,
+            "cmd": "",
             "working-dir": steam_wd or home,
             "image-path": posters["steam"],
-            "detached": False,
+            "detached": [steam_cmd],
             "elevated": False,
             "exit-on-close": True,
             **_common_fields(),
@@ -155,10 +155,10 @@ def import_launchers(home: str, conf_dir: str, images_dir: str, settings: Dict[s
     if heroic_cmd:
         apps.append({
             "name": NAMES["heroic"],
-            "cmd": heroic_cmd,
+            "cmd": "",
             "working-dir": heroic_wd or home,
             "image-path": posters["heroic"],
-            "detached": False,
+            "detached": [heroic_cmd],
             "elevated": False,
             "exit-on-close": True,
             **_common_fields(),

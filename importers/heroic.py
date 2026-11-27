@@ -536,10 +536,10 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
         game_entry = {
             "name": f"{title or gid} ({src})",
             "output": "",
-            "cmd": cmd,
+            "cmd": "",
             "working-dir": install_path or home,
             "image-path": image_path or "",  # May be pre-set (sideload)
-            "detached": False,
+            "detached": [cmd],
             "elevated": False,
             "exit-on-close": True,
             "_gid": gid,

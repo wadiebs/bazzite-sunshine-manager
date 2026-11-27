@@ -513,7 +513,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
     # Store games needing image downloads
     games_needing_images: List[Dict[str, Any]] = []
 
-    def add_heroic(title, gid, install_path, src, image_path="", source_json=""):
+    def add_heroic(title, gid, src, image_path="", source_json=""):
         # Name blacklist by regex
         if blacklist_name_regex:
             for pat in blacklist_name_regex.split("|"):
@@ -537,7 +537,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
             "name": f"{title or gid} ({src})",
             "output": "",
             "cmd": "",
-            "working-dir": install_path or home,
+            "working-dir": home,
             "image-path": image_path or "",  # May be pre-set (sideload)
             "detached": [cmd],
             "elevated": False,
@@ -560,9 +560,8 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
             try:
                 raw = read_json(legendary_installed, {})
                 for gid, val in (raw or {}).items():
-                    install_path = str((val or {}).get("install_path") or "")
                     title = (val or {}).get("title") or (val or {}).get("app_title") or gid
-                    add_heroic(title, gid, install_path, "Epic")
+                    add_heroic(title, gid, "Epic")
             except Exception as e:
                 log(f"Failed to parse Epic installed.json: {e}")
 
@@ -645,7 +644,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                         resolved = resolve_gog_title(installed_meta if isinstance(installed_meta, dict) else {}, str(gid), install_path, hero_conf_root)
                         title = resolved if is_valid_game_title(resolved) else humanize_slug(str(gid))
                     
-                    add_heroic(title, gid, install_path, "GOG", source_json=cfg_path)
+                    add_heroic(title, gid, "GOG", source_json=cfg_path)
 
             # Fallback: some installed GOG IDs may not exist in GamesConfig yet.
             for gid, it in installed_gog.items():
@@ -657,7 +656,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                 title = resolve_gog_title(it, str(gid), install_path, hero_conf_root)
                 if not is_valid_game_title(title):
                     title = humanize_slug(str(gid))
-                add_heroic(title, str(gid), install_path, "GOG", source_json=gog_installed)
+                add_heroic(title, str(gid), "GOG", source_json=gog_installed)
         elif installed_gog:
             # Fallback: import from installed.json when GamesConfig is unavailable.
             for gid, it in installed_gog.items():
@@ -667,7 +666,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                 title = resolve_gog_title(it, str(gid), install_path, hero_conf_root)
                 if not is_valid_game_title(title):
                     title = humanize_slug(str(gid))
-                add_heroic(title, str(gid), install_path, "GOG", source_json=gog_installed)
+                add_heroic(title, str(gid), "GOG", source_json=gog_installed)
 
     # --------------------- AMAZON (Nile) ---------------------
     if "amazon" in include_sources:
@@ -705,7 +704,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
             title = resolve_amazon_title(it, str(gid), install_path)
             if not is_valid_game_title(title):
                 title = humanize_slug(str(gid))
-            add_heroic(title, str(gid), install_path, "Amazon", source_json=seen_source)
+            add_heroic(title, str(gid), "Amazon", source_json=seen_source)
 
         # Fallback: try to detect Amazon entries from GamesConfig when nile_* json files are missing.
         if not installed_amazon and os.path.isdir(games_cfg_dir):
@@ -736,7 +735,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                     if not is_valid_game_title(title):
                         title = humanize_slug(str(gid))
 
-                    add_heroic(title, str(gid), install_path, "Amazon", source_json=cfg_path)
+                    add_heroic(title, str(gid), "Amazon", source_json=cfg_path)
 
     # --------------------- SIDELOAD ---------------------
     if os.path.isfile(sideload_library):
@@ -797,7 +796,7 @@ def import_heroic(home: str, conf_dir: str, images_dir: str, settings: Dict[str,
                             os.remove(tmp_src)
                         except Exception:
                             pass
-                add_heroic(title or sid, sid, workd_path or os.path.dirname(exe_path) or workd or home, "Sideload", image_path=out_cover)
+                add_heroic(title or sid, sid, "Sideload", image_path=out_cover)
                 count += 1
             log(f"Sideload parsed: {count} entries")
         except Exception as e:

@@ -49,20 +49,15 @@ def _download_image(src_url: str, dst_path: str, timeout: int = 8) -> bool:  # R
         log(f"Poster download failed: {url} -> {dst_path} ({e})")
         return False
 
-def _steam_cmd(home: str) -> tuple[str, str]:
-    """Return (cmd, working_dir) for Steam if found, else ('','')."""
+def _steam_cmd(home: str) -> str:
     flatpak_root = f"{home}/.var/app/com.valvesoftware.Steam/.local/share/Steam"
     if os.path.isdir(flatpak_root):
-        return ("flatpak run com.valvesoftware.Steam", flatpak_root)
+        return "flatpak run com.valvesoftware.Steam"
     if have_cmd("steam"):
-        for r in (f"{home}/.local/share/Steam", f"{home}/.steam/steam"):
-            if os.path.isdir(r):
-                return ("steam", r)
-        return ("steam", home)
-    return ("", "")
+        return "steam"
+    return ""
 
-def _heroic_cmd(home: str) -> tuple[str, str]:
-    """Return (cmd, working_dir) for Heroic if found, else ('','')."""
+def _heroic_cmd(home: str) -> str:
     candidates = [
         "/var/home/steam/.var/app/com.heroicgameslauncher.hgl/config/heroic",
         f"{home}/.var/app/com.heroicgameslauncher.hgl/config/heroic",
@@ -70,10 +65,10 @@ def _heroic_cmd(home: str) -> tuple[str, str]:
     ]
     is_flatpak = any(os.path.isdir(p) and "/.var/app/" in p for p in candidates)
     if is_flatpak:
-        return ("flatpak run com.heroicgameslauncher.hgl", home)
+        return "flatpak run com.heroicgameslauncher.hgl"
     if have_cmd("heroic"):
-        return ("heroic", home)
-    return ("", "")
+        return "heroic"
+    return ""
 
 def _common_fields() -> Dict[str, Any]:
     return {
@@ -134,12 +129,12 @@ def import_launchers(home: str, conf_dir: str, images_dir: str, settings: Dict[s
     log(f"Added {yn(NAMES['desktop'])} launcher")
 
     # 2) Steam (only if installed)
-    steam_cmd, steam_wd = _steam_cmd(home)
+    steam_cmd = _steam_cmd(home)
     if steam_cmd:
         apps.append({
             "name": NAMES["steam"],
             "cmd": "",
-            "working-dir": steam_wd or home,
+            "working-dir": home,
             "image-path": posters["steam"],
             "detached": [steam_cmd],
             "elevated": False,
@@ -151,12 +146,12 @@ def import_launchers(home: str, conf_dir: str, images_dir: str, settings: Dict[s
         log("Steam not detected; skipping Steam launcher")
 
     # 3) Heroic (only if installed)
-    heroic_cmd, heroic_wd = _heroic_cmd(home)
+    heroic_cmd = _heroic_cmd(home)
     if heroic_cmd:
         apps.append({
             "name": NAMES["heroic"],
             "cmd": "",
-            "working-dir": heroic_wd or home,
+            "working-dir": home,
             "image-path": posters["heroic"],
             "detached": [heroic_cmd],
             "elevated": False,

@@ -53,7 +53,11 @@ Earlier saves remain applied.
 
 The importer no longer reads, backs up, or writes `apps.json`, or changes Sunshine's
 global environment (`ENV_PATH_APPEND` is no longer used). Ensure launch commands
-are available in Sunshine's existing `PATH`. Cover images are still stored locally;
+are available in the launch environment's `PATH`. The importer checks the running
+Flatpak apps for Sunshine and adds `flatpak-spawn --host` to generated commands
+for Flatpak Sunshine. Native and Homebrew Sunshine run commands directly on the
+host. Steam and Heroic installation types are detected separately.
+Cover images are still stored locally;
 `--conf-dir` selects their Sunshine directory and must be accessible to Sunshine.
 The API contract follows [Sunshine's Web UI handlers](https://github.com/LizardByte/Sunshine/blob/master/src/confighttp.cpp).
 

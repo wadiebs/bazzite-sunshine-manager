@@ -22,6 +22,7 @@ import sys
 import os
 import argparse
 import getpass
+import json
 import subprocess
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -70,17 +71,15 @@ def _native_running() -> bool:
     return res is not None and res.returncode == 0
 
 
-def detect_sunshine_config_dir(home: str) -> str:
+def detect_sunshine_config_dir(home: str, flatpak_id: Optional[str]) -> str:
     """Pick the config dir of the Sunshine instance in use (override > running instance > newest apps.json)."""
     override = os.getenv("SUNSHINE_CONF_DIR")
     if override:
         log(f"Config dir from SUNSHINE_CONF_DIR: {override}")
         return override
 
-    fid = _running_flatpak_id()
-    if fid:
-        log(f"Detected running Flatpak Sunshine ({fid})")
-        return _flatpak_config_dir(home, fid)
+    if flatpak_id:
+        return _flatpak_config_dir(home, flatpak_id)
 
     native = _native_config_dir(home)
     if _native_running():
@@ -95,6 +94,22 @@ def detect_sunshine_config_dir(home: str) -> str:
         log(f"Sunshine not running; using most recently modified config: {chosen}")
         return chosen
     return native
+
+
+def configure_flatpak_launch(app: Dict[str, Any]) -> None:
+    """Run generated commands and their working directory on the host."""
+    if not (app.get("cmd") or app.get("detached")):
+        return
+
+    prefix = "flatpak-spawn --host"
+    if working_dir := app.get("working-dir"):
+        prefix += f" --directory={json.dumps(working_dir, ensure_ascii=False)}"
+        # Sunshine must start flatpak-spawn from a sandbox-visible directory.
+        app["working-dir"] = "/"
+    if app.get("cmd"):
+        app["cmd"] = f"{prefix} {app['cmd']}"
+    if app.get("detached"):
+        app["detached"] = [f"{prefix} {command}" for command in app["detached"]]
 
 
 def getenv_flag(name: str, default: bool) -> bool:
@@ -129,7 +144,9 @@ def main(argv: list[str]) -> int:
         return 1
 
     home = str(Path.home())
-    conf_dir = detect_sunshine_config_dir(home)
+    flatpak_id = _running_flatpak_id()
+    log(f"Sunshine launch mode: Flatpak ({flatpak_id})" if flatpak_id else "Sunshine launch mode: host (native or Homebrew)")
+    conf_dir = detect_sunshine_config_dir(home, flatpak_id)
     os.makedirs(conf_dir, exist_ok=True)
 
     # Paths
@@ -171,6 +188,8 @@ def main(argv: list[str]) -> int:
     saved = 0
     try:
         for app in apps:
+            if flatpak_id:
+                configure_flatpak_launch(app)
             action = api.upsert_app(app)
             saved += 1
             log(f"{action}: {app['name']}")

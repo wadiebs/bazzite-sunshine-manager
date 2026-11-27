@@ -107,11 +107,13 @@ def getenv_flag(name: str, default: bool) -> bool:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Import applications using the localhost Sunshine API.")
     parser.add_argument("--sunshine-user", default=os.getenv("SUNSHINE_USERNAME"))
+    parser.add_argument("--sunshine-password", default=os.getenv("SUNSHINE_PASSWORD"))
     parser.add_argument("--sunshine-port", type=int, default=os.getenv("SUNSHINE_PORT", "47990"))
     parser.add_argument("--verify-tls", action="store_true", default=getenv_flag("SUNSHINE_VERIFY_TLS", False))
+    parser.add_argument("--restart", action="store_true", help="Restart Sunshine through its API after saving apps.")
     args = parser.parse_args(argv[1:])
     username = args.sunshine_user
-    password = os.getenv("SUNSHINE_PASSWORD")
+    password = args.sunshine_password
     if sys.stdin.isatty():
         try:
             username = username or input("Sunshine username: ")
@@ -176,6 +178,14 @@ def main(argv: list[str]) -> int:
         log(f"Import stopped after {saved}/{len(apps)} saves: {exc}")
         return 1
     log(f"Saved {saved} apps through the Sunshine API.")
+
+    if args.restart:
+        try:
+            api.restart()
+        except SunshineAPIError as exc:
+            log(f"Sunshine restart failed: {exc}")
+            return 1
+        log("Sunshine restart requested through the API.")
 
     return 0
 

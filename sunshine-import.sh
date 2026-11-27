@@ -8,13 +8,13 @@
 #   --steam / --no-steam           Enable/disable Steam importer (EXPORT: IMPORT_STEAM=1/0)
 #   --heroic / --no-heroic         Enable/disable Heroic importer (IMPORT_HEROIC=1/0)
 #   --launchers / --no-launchers   Enable/disable Launchers importer (IMPORT_LAUNCHERS=1/0)
-#   --restart                      Restart Sunshine after import (systemctl --user restart sunshine.service)
+#   --restart                      Restart Sunshine after import through its local API
 #   --python PY                    Python interpreter to use (default: python3)
 #   --conf-dir DIR                 Force Sunshine config dir (sets SUNSHINE_CONF_DIR for your script to read)
 #   --sunshine-user USER           Sunshine Web UI username (or SUNSHINE_USERNAME)
+#   --sunshine-password PASSWORD   Sunshine Web UI password (or SUNSHINE_PASSWORD)
 #   --sunshine-port PORT           Local HTTPS API port (default: 47990)
 #   --verify-tls                   Verify Sunshine's TLS certificate
-#   Password: SUNSHINE_PASSWORD environment variable, or a hidden interactive prompt
 #   --sgdb-key "YOUR_STEAMGRID_API" Enable SteamGrid to download game covers (IMPORT_HEROIC=1/0)
 #   -h, --help                     Show help
 #
@@ -27,7 +27,6 @@ set -euo pipefail
 
 # Defaults
 PYTHON="python3"
-RESTART=0
 : "${IMPORT_STEAM:=1}"
 : "${IMPORT_HEROIC:=1}"
 : "${IMPORT_LAUNCHERS:=1}"
@@ -62,7 +61,6 @@ while (( "$#" )); do
     --no-heroic)    IMPORT_HEROIC=0; shift ;;
     --launchers)    IMPORT_LAUNCHERS=1; shift ;;
     --no-launchers) IMPORT_LAUNCHERS=0; shift ;;
-    --restart)      RESTART=1; shift ;;
     --python)       PYTHON="${2:-}"; shift 2 ;;
     --conf-dir)     export SUNSHINE_CONF_DIR="${2:-}"; shift 2 ;;
     --sgdb-key)     SGDB_API_KEY="${2:-}"; shift 2 ;;
@@ -88,7 +86,7 @@ fi
 # Environment toggles exported for the Python script
 export IMPORT_STEAM IMPORT_HEROIC IMPORT_LAUNCHERS SGDB_API_KEY SGDB_ENABLE SGDB_TIMEOUT
 
-echo "[sunshine-import] IMPORT_STEAM=$IMPORT_STEAM IMPORT_HEROIC=$IMPORT_HEROIC IMPORT_LAUNCHERS=$IMPORT_LAUNCHERS RESTART=$RESTART" >&2
+echo "[sunshine-import] IMPORT_STEAM=$IMPORT_STEAM IMPORT_HEROIC=$IMPORT_HEROIC IMPORT_LAUNCHERS=$IMPORT_LAUNCHERS" >&2
 if [[ -n "${SUNSHINE_CONF_DIR:-}" ]]; then
   echo "[sunshine-import] SUNSHINE_CONF_DIR=$SUNSHINE_CONF_DIR" >&2
 fi
@@ -102,26 +100,6 @@ set -e
 if [[ $RET -ne 0 ]]; then
   echo "[sunshine-import] Python exited with code $RET" >&2
   exit "$RET"
-fi
-
-if [[ $RESTART -eq 1 ]]; then
-  echo "[sunshine-import] Checking which Sunshine service is running..." >&2
-  
-  # Check which sunshine service is active
-  if systemctl --user is-active --quiet sunshine-kms.service; then
-    echo "[sunshine-import] Restarting sunshine-kms.service..." >&2
-    systemctl --user restart sunshine-kms.service || {
-      echo "[sunshine-import] WARNING: failed to restart sunshine-kms.service" >&2
-    }
-  elif systemctl --user is-active --quiet sunshine.service; then
-    echo "[sunshine-import] Restarting sunshine.service..." >&2
-    systemctl --user restart sunshine.service || {
-      echo "[sunshine-import] WARNING: failed to restart sunshine.service" >&2
-    }
-  else
-    echo "[sunshine-import] WARNING: No active Sunshine service found. Skipping restart." >&2
-    echo "[sunshine-import] Please start either sunshine.service or sunshine-kms.service manually." >&2
-  fi
 fi
 
 echo "[sunshine-import] Done." >&2

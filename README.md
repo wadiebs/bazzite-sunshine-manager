@@ -35,8 +35,8 @@ sunshine-import
 
 Enter your Sunshine Web UI username and password when prompted. For unattended runs,
 set `SUNSHINE_USERNAME` and `SUNSHINE_PASSWORD` in the process environment.
-Credentials are not saved by the importer. You can also provide the username with
-`--sunshine-user USER`.
+You can also pass `--sunshine-user USER` and `--sunshine-password PASSWORD`.
+These flags override their corresponding environment variables.
 
 The API must already be running at `https://localhost:47990`. Use
 `--sunshine-port PORT` (or `SUNSHINE_PORT`) for a different local port.
@@ -47,8 +47,9 @@ using the system trust store.
 Applications are matched by exact name: existing matches are updated and new names
 are created. Other entries, including games now blacklisted or uninstalled, remain
 untouched. Duplicate existing names stop the import with an error. Saves take effect
-immediately, so `--restart` is optional. If a save fails, the command exits nonzero
-and reports how many applications were saved; earlier saves remain applied.
+immediately, so `--restart` is optional. It sends `POST /api/restart` after all
+saves succeed. If a save or the restart request fails, the command exits nonzero.
+Earlier saves remain applied.
 
 The importer no longer reads, backs up, or writes `apps.json`, or changes Sunshine's
 global environment (`ENV_PATH_APPEND` is no longer used). Ensure launch commands

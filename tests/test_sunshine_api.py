@@ -1,3 +1,4 @@
+import http.client
 import io
 import json
 import unittest
@@ -62,6 +63,25 @@ class SunshineAPITests(unittest.TestCase):
         self.api.opener.open.side_effect = [self.respond({"apps": []}), self.respond({})]
         with self.assertRaises(SunshineAPIError):
             self.api.upsert_app({"name": "A"})
+
+    def test_restart_uses_authentication_and_accepts_disconnect(self):
+        self.api.opener.open.side_effect = http.client.RemoteDisconnected()
+        self.api.restart()
+        request = self.api.opener.open.call_args.args[0]
+        self.assertEqual(request.full_url, self.api.url + "/api/restart")
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(request.get_header("Authorization"), "Basic dXNlcjpzZWNyZXQ=")
+
+    def test_restart_accepts_empty_response(self):
+        self.api.opener.open.return_value = io.BytesIO()
+        self.api.restart()
+
+    def test_restart_reports_http_failure(self):
+        self.api.opener.open.side_effect = HTTPError(
+            self.api.url, 500, "Internal Server Error", {}, None,
+        )
+        with self.assertRaisesRegex(SunshineAPIError, "HTTP 500"):
+            self.api.restart()
 
 
 if __name__ == "__main__":

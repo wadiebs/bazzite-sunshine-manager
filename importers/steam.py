@@ -1,7 +1,7 @@
 import os, re, glob, json, pathlib
 from typing import List, Dict, Any
 from common.utils import log, yn, read_json
-from common.images import steam_local_to_png, steam_cdn_to_png, steam_sgdb_to_png
+from common.images import steam_local_to_png, steam_cdn_to_png, steam_sgdb_to_png, steam_sgdb_public_to_png
 from common.image_downloader import ImageDownloader
 
 def import_steam(home: str, conf_dir: str, images_dir: str, settings: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -130,7 +130,8 @@ def import_steam(home: str, conf_dir: str, images_dir: str, settings: Dict[str, 
                 return (steam_local_to_png(aid, images_dir, steam_root=steam_root) or
                         steam_cdn_to_png(aid, images_dir, timeout=timeout) or
                         steam_sgdb_to_png(aid, images_dir, api_key=api_key,
-                                        enable=sgdb_enable, timeout=timeout))
+                                        enable=sgdb_enable, timeout=timeout) or
+                        steam_sgdb_public_to_png(aid, images_dir, enable=sgdb_enable, timeout=timeout))
             return download
         download_tasks[str(appid)] = make_download_func(appid)
     

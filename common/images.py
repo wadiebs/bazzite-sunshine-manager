@@ -1,4 +1,5 @@
 import os, re, urllib.request, urllib.parse, tempfile, shutil, subprocess
+import json
 from io import BytesIO
 from PIL import Image  # pillow is required
 from .utils import have_cmd
@@ -244,6 +245,85 @@ def steam_sgdb_to_png(appid: int, images_dir: str, api_key: str, enable: bool, t
         return out if ok else ""
     except Exception:
         return ""
+
+def steam_sgdb_public_to_png(appid: int, images_dir: str, enable: bool, timeout: int = 12) -> str:
+    """Fetch portrait artwork using the public SteamGridDB website."""
+    if not enable:
+        return ""
+
+    base = "https://www.steamgriddb.com"
+    headers = {"User-Agent": "bazzite-sunshine-manager"}
+    try:
+        request = urllib.request.Request(f"{base}/steam/{appid}", headers=headers)
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            game_page = urllib.parse.urlsplit(response.geturl())
+        game = re.fullmatch(r"/game/(\d+)/?", game_page.path)
+        if game_page.hostname != "www.steamgriddb.com" or not game:
+            return ""
+
+        # The game page renders its grids from this JSON response.
+        query = {
+            "asset_type": "grid",
+            "game_id": [int(game[1])],
+            "dimensions": ["600x900"],
+            "styles": ["all"],
+            "languages": ["all"],
+            "formats": ["all"],
+            "order": "score_desc",
+            "static": True,
+            "animated": False,
+            "nsfw": False,
+            "epilepsy": False,
+            "humor": False,
+            "untagged": True,
+            "page": 0,
+            "limit": 12,
+            "user_steam64": None,
+            "user_steam64_likes": None,
+        }
+        request = urllib.request.Request(
+            f"{base}/api/public/search/assets",
+            data=json.dumps(query).encode("utf-8"),
+            headers={
+                **headers,
+                "Content-Type": "application/json",
+                "X-Requested-With": "XMLHttpRequest",
+            },
+        )
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            result = json.load(response)
+        if not result.get("success"):
+            return ""
+        assets = result["data"]["assets"]
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return ""
+
+    if not isinstance(assets, list):
+        return ""
+    out = os.path.join(images_dir, f"{appid}.png")
+    for asset in assets:
+        if not isinstance(asset, dict) or (asset.get("width"), asset.get("height")) != (600, 900):
+            continue
+        url = asset.get("url")
+        if not isinstance(url, str) or not re.fullmatch(
+            r"https://cdn\d*\.steamgriddb\.com/grid/[a-f0-9]+\.(?:png|jpe?g|webp)", url, re.I
+        ):
+            continue
+        try:
+            data = _download_image_bytes(url, timeout=timeout)
+            if not data:
+                continue
+            with tempfile.TemporaryDirectory(dir=images_dir) as staging_dir:
+                src = os.path.join(staging_dir, "source" + os.path.splitext(url)[1])
+                png = os.path.join(staging_dir, "cover.png")
+                save_bytes_to(src, data)
+                if stretch_png_600x900(src, png):
+                    os.replace(png, out)
+                    return out
+        except (OSError, ValueError):
+            continue
+    return ""
+
 
 def sgdb_search_by_name(game_name: str, images_dir: str, filename: str, api_key: str, enable: bool, timeout: int = 12) -> str:
     """Search SteamGridDB by game name for non-Steam games."""

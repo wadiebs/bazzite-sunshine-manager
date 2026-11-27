@@ -98,7 +98,7 @@ def import_steam(home: str, conf_dir: str, images_dir: str, settings: Dict[str, 
                 continue
 
             if steam_mode=="flatpak":
-                cmd=f'flatpak-spawn --host flatpak run com.valvesoftware.Steam steam -applaunch {appid}'
+                cmd=f'flatpak run com.valvesoftware.Steam -applaunch {appid}'
                 workdir=f"{home}/.var/app/com.valvesoftware.Steam/.local/share/Steam"
             else:
                 cmd=f'steam -applaunch {appid}'

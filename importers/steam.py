@@ -99,16 +99,13 @@ def import_steam(home: str, conf_dir: str, images_dir: str, settings: Dict[str, 
 
             if steam_mode=="flatpak":
                 cmd=f'flatpak run com.valvesoftware.Steam -applaunch {appid}'
-                workdir=f"{home}/.var/app/com.valvesoftware.Steam/.local/share/Steam"
             else:
                 cmd=f'steam -applaunch {appid}'
-                workdir=steam_root
             
             game_metadata.append({
                 "appid": appid,
                 "name": name,
                 "cmd": cmd,
-                "workdir": workdir
             })
             log(f"Found Steam  [{appid}] {yn(name)}")
     
@@ -147,7 +144,7 @@ def import_steam(home: str, conf_dir: str, images_dir: str, settings: Dict[str, 
             "name": game["name"], 
             "output": "", 
             "cmd": "",
-            "working-dir": game["workdir"],
+            "working-dir": home,
             "image-path": image_path or "", 
             "detached": [game["cmd"]],
             "elevated": False, 
